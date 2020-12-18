@@ -1,4 +1,4 @@
-package oss
+package ali
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/xurwxj/ctils/oss/utils"
 	"github.com/xurwxj/viper"
 )
 
@@ -88,7 +89,7 @@ func InitBucket(prefer, bucket string) (*oss.Bucket, error) {
 //     }
 //   },
 func AliPutByteFile(prefer, dfsID, bucketType string, o map[string]string, f []byte) error {
-	prefer, bn := GetByBucketPrefer(prefer, bucketType)
+	prefer, bn := utils.GetByBucketPrefer(prefer, bucketType)
 	if bn != "" && prefer != "" {
 		b, err := InitBucket(prefer, bn)
 		if err == nil {
@@ -125,7 +126,7 @@ func AliPutByteFile(prefer, dfsID, bucketType string, o map[string]string, f []b
 //     }
 //   },
 func AliPutFile(prefer, dfsID, bucketType string, ossFile *multipart.FileHeader) error {
-	prefer, bn := GetByBucketPrefer(prefer, bucketType)
+	prefer, bn := utils.GetByBucketPrefer(prefer, bucketType)
 	if bn != "" && prefer != "" {
 		b, err := InitBucket(prefer, bn)
 		if err == nil {
@@ -168,7 +169,7 @@ func AliGetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[str
 	var endPoint string
 	var downURL string
 	rs := make(map[string]string)
-	prefer, bn := GetPreferByBucketName(bucketName)
+	prefer, bn := utils.GetPreferByBucketName(bucketName)
 	if bn != "" && prefer != "" {
 		if b, err = InitBucket(prefer, bn); err != nil {
 			return rs, err
@@ -202,7 +203,7 @@ func AliGetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[str
 
 // AliGetFile get file bytes, filename,content-type, size from ali oss
 func AliGetFile(bucketName, dfsID string) ([]byte, string, string, int64, error) {
-	prefer, bn := GetPreferByBucketName(bucketName)
+	prefer, bn := utils.GetPreferByBucketName(bucketName)
 	if bn != "" && prefer != "" {
 		b, err := InitBucket(prefer, bn)
 		if err == nil && b != nil {

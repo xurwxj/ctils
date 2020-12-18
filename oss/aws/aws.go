@@ -1,4 +1,4 @@
-package oss
+package aws
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	s3sses "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/xurwxj/ctils/oss/utils"
 	"github.com/xurwxj/viper"
 )
 
@@ -172,7 +173,7 @@ func AWSPutByteFile(prefer, dfsID, bucketType string, o map[string]string, c []b
 func AWSGetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[string]string, error) {
 	var endPoint string
 	rs := make(map[string]string)
-	prefer, bn := GetPreferByBucketName(bucketName)
+	prefer, bn := utils.GetPreferByBucketName(bucketName)
 	if bn != "" && prefer != "" {
 		endPoint = viper.GetString(fmt.Sprintf("oss.%s.endpoint", prefer))
 		accessKey := viper.GetString(fmt.Sprintf("oss.%s.accessKey", prefer))
@@ -210,7 +211,7 @@ func AWSGetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[str
 // AWSGetFile get file bytes, filename,content-type, size from aws s3
 func AWSGetFile(bucketName, dfsID string) ([]byte, string, string, int64, error) {
 	var endPoint string
-	prefer, bn := GetPreferByBucketName(bucketName)
+	prefer, bn := utils.GetPreferByBucketName(bucketName)
 	if bn != "" && prefer != "" {
 		endPoint = viper.GetString(fmt.Sprintf("oss.%s.endpoint", prefer))
 		accessKey := viper.GetString(fmt.Sprintf("oss.%s.accessKey", prefer))
