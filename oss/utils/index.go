@@ -55,7 +55,7 @@ func SetDfsID(userID, fileName, category, subCategory, relativePath, identifier,
 
 // ChunksObj for multipart upload
 type ChunksObj struct {
-	Category         string `form:"category" query:"category" json:"category"`
+	Category         string `form:"category" query:"category" json:"category" validate:"uploadCateCheck"`
 	SubCate          string `form:"subcate" query:"subcate" json:"subcate"`
 	GEO              string `form:"geo" query:"geo" json:"geo"`
 	Bucket           string `form:"bucket" query:"bucket" json:"bucket"`
