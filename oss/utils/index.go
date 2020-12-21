@@ -55,16 +55,16 @@ func SetDfsID(userID, fileName, category, subCategory, relativePath, identifier,
 
 // ChunksObj for multipart upload
 type ChunksObj struct {
-	Category         string `form:"category" json:"category"`
-	SubCate          string `form:"subcate" json:"subcate"`
-	GEO              string `form:"geo" json:"geo"`
-	Bucket           string `form:"bucket" json:"bucket"`
-	ChunkNumber      int    `form:"chunkNumber" on:"chunkNumber"`
-	Identifier       string `form:"identifier" json:"identifier"`
-	Filename         string `form:"filename" json:"filename"`
-	RelativePath     string `form:"relativePath" json:"relativePath"`
-	CurrentChunkSize int64  `form:"currentChunkSize" json:"currentChunkSize"`
-	TotalSize        int64  `form:"totalSize" json:"totalSize"`
-	TotalChunks      int    `form:"totalChunks" json:"totalChunks"`
-	DownValidTo      int64  `form:"downValidTo" json:"downValidTo"`
+	Category         string `form:"category" query:"category" json:"category"`
+	SubCate          string `form:"subcate" query:"subcate" json:"subcate"`
+	GEO              string `form:"geo" query:"geo" json:"geo"`
+	Bucket           string `form:"bucket" query:"bucket" json:"bucket"`
+	ChunkNumber      int    `form:"chunkNumber" query:"chunkNumber" json:"chunkNumber"`
+	Identifier       string `form:"identifier" query:"identifier" json:"identifier"`
+	Filename         string `form:"filename" query:"filename" json:"filename"`
+	RelativePath     string `form:"relativePath" query:"relativePath" json:"relativePath"`
+	CurrentChunkSize int64  `form:"currentChunkSize" query:"currentChunkSize" json:"currentChunkSize"`
+	TotalSize        int64  `form:"totalSize" query:"totalSize" json:"totalSize"`
+	TotalChunks      int    `form:"totalChunks" query:"totalChunks" json:"totalChunks"`
+	DownValidTo      int64  `form:"downValidTo" query:"downValidTo" json:"downValidTo"`
 }
