@@ -168,7 +168,7 @@ func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (
 		}
 	}
 	go clearInit(dfsID)
-	return chunk, 200, dfsID, err
+	return chunk, 200, "DONE", err
 }
 
 func clearInit(dfsID string) {
