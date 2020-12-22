@@ -51,6 +51,21 @@ func GetOSSPreferByCountryID(countryID, GEO string) string {
 	return prefer
 }
 
+// GetBucketTypeByNme get pub bucket name by data bucket name under same endpoint
+func GetBucketTypeByNme(d string) string {
+	for k := range viper.GetStringMap("oss") {
+		for s := range viper.GetStringMap(fmt.Sprintf("oss.%s", k)) {
+			if s == "bucket" && viper.GetString(fmt.Sprintf("oss.%s.bucket.data", k)) == d {
+				return "data"
+			}
+			if s == "bucket" && viper.GetString(fmt.Sprintf("oss.%s.bucket.pub", k)) == d {
+				return "pub"
+			}
+		}
+	}
+	return ""
+}
+
 // SetMultiPartDfsID gen unique dfsID by userID, cloud, ChunksObj
 func SetMultiPartDfsID(userID, cloud string, obj ChunksObj) string {
 	return SetDfsID(userID, obj.Filename, obj.Category, obj.SubCate, obj.RelativePath, obj.Identifier, cloud, obj.TotalSize)
