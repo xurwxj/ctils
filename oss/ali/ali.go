@@ -163,6 +163,9 @@ func PutFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, ossFile *m
 			}
 			defer f.Close()
 			err = b.PutObject(dfsID, f, options...)
+			if err != nil {
+				return chunk, err
+			}
 			if err == nil {
 				chunk.ContentType = ct
 				chunk.Bucket = bn
@@ -176,6 +179,7 @@ func PutFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, ossFile *m
 						chunk.DownURL = url
 					}
 				}
+				return chunk, nil
 			}
 		}
 		return chunk, err
