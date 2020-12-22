@@ -76,9 +76,10 @@ func SetDfsID(userID, fileName, category, subCategory, relativePath, identifier,
 	hasher := md5.New()
 	hasher.Write([]byte(fmt.Sprintf("%s%s%s%s%v%s%s%s", userID, fileName, category, subCategory, totalSize, relativePath, identifier, cloud)))
 	dfsID := hex.EncodeToString(hasher.Sum(nil))
-	dfsID = fmt.Sprintf("%s/%s", category, dfsID)
 	if subCategory != "" {
 		dfsID = fmt.Sprintf("%s/%s/%s", category, subCategory, dfsID)
+	} else {
+		dfsID = fmt.Sprintf("%s/%s", category, dfsID)
 	}
 	return dfsID
 }
