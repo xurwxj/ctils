@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/xurwxj/gtils/base"
 	"github.com/xurwxj/viper"
 )
 
@@ -24,6 +25,11 @@ func GetByBucketPrefer(prefer, bucketType string) (string, string) {
 	return "", ""
 }
 
+// GetEndpointByPrefer get endpoint by prefer
+func GetEndpointByPrefer(prefer string) string {
+	return viper.GetString(fmt.Sprintf("oss.%s.endpoint", prefer))
+}
+
 // GetPreferByBucketName get prefer by bucket name
 func GetPreferByBucketName(bucketName string) (string, string) {
 	for k := range viper.GetStringMap("oss") {
@@ -34,6 +40,15 @@ func GetPreferByBucketName(bucketName string) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+// GetOSSPreferByCountryID get oss prefer region by countryID
+func GetOSSPreferByCountryID(countryID, GEO string) string {
+	prefer := "default"
+	if (base.FindInStringSlice([]string{"cn", "china", "local"}, countryID) || viper.GetString("env") == "dev" || countryID == "") && base.FindInStringSlice([]string{"true", "1", "t"}, GEO) {
+		prefer = "cnhz"
+	}
+	return prefer
 }
 
 // SetMultiPartDfsID gen unique dfsID by userID, cloud, ChunksObj
@@ -55,9 +70,10 @@ func SetDfsID(userID, fileName, category, subCategory, relativePath, identifier,
 
 // ChunksObj for multipart upload
 type ChunksObj struct {
-	Category         string `form:"category" query:"category" json:"category" validate:"uploadCateCheck"`
-	SubCate          string `form:"subcate" query:"subcate" json:"subcate"`
-	GEO              string `form:"geo" query:"geo" json:"geo"`
+	Category string `form:"category" query:"category" json:"category" validate:"uploadCateCheck"`
+	SubCate  string `form:"subcate" query:"subcate" json:"subcate"`
+	GEO      string `form:"geo" query:"geo" json:"geo"`
+	// 在开始上传后变更
 	Bucket           string `form:"bucket" query:"bucket" json:"bucket"`
 	ChunkNumber      int    `form:"chunkNumber" query:"chunkNumber" json:"chunkNumber"`
 	Identifier       string `form:"identifier" query:"identifier" json:"identifier"`
@@ -67,4 +83,10 @@ type ChunksObj struct {
 	TotalSize        int64  `form:"totalSize" query:"totalSize" json:"totalSize"`
 	TotalChunks      int    `form:"totalChunks" query:"totalChunks" json:"totalChunks"`
 	DownValidTo      int64  `form:"downValidTo" query:"downValidTo" json:"downValidTo"`
+
+	// 上传完成后变动
+	DfsID       string `json:"dfsID"`
+	ContentType string `json:"contentType"`
+	Endpoint    string `json:"endpoint"`
+	DownURL     string `json:"downURL"`
 }

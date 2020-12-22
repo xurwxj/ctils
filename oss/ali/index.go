@@ -45,15 +45,15 @@ func init() {
 // 200 OK client need to ignore this part
 // 300 dfsID caller should do other thing, then client can get success upload infor
 // 500 client need to upload whole file again
-func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (int, string, error) {
+func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
 	if !checkPartNumberUploaded(chunk.ChunkNumber, dfsID) {
-		return 400, "NotExist", nil
+		return chunk, 400, "NotExist", nil
 	}
 	if checkAllPartsUploaded(chunk.TotalChunks, dfsID) {
 		return completeChunksUpload(userID, prefer, dfsID, chunk)
 	}
-	return 200, "OK", nil
+	return chunk, 200, "OK", nil
 }
 
 // ChunkUploadPostStream chunk upload for post
@@ -61,22 +61,22 @@ func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (
 // 200 OK client need to ignore this part
 // 300 dfsID caller should do other thing, then client can get success upload infor
 // 500 client need to upload whole file again
-func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (int, string, error) {
+func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
 	b, err := getBucketInstance(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
 	if err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	imur, err := getIMURS(dfsID, chunk.ChunkNumber, b)
 	if err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	options := []oss.Option{
 		oss.ContentDisposition("filename=" + chunk.Filename),
 	}
 	f, err := fileChunk.Open()
 	if err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	defer f.Close()
 	chunkPart, err := b.UploadPart(imur, f, chunk.CurrentChunkSize, chunk.ChunkNumber, options...)
@@ -84,17 +84,17 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 		if strings.Index(err.Error(), "dial tcp") > -1 {
 			return ChunkUploadPostStream(userID, prefer, cloud, chunk, fileChunk)
 		}
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	f.Close()
 	err = setCompletePart(chunkPart, dfsID, chunk.ChunkNumber)
 	if err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	if checkAllPartsUploaded(chunk.TotalChunks, dfsID) {
 		return completeChunksUpload(userID, prefer, dfsID, chunk)
 	}
-	return 200, "OK", nil
+	return chunk, 200, "OK", nil
 }
 
 func setCompletePart(part oss.UploadPart, dfsID string, chunkNumber int) error {
@@ -129,21 +129,21 @@ func setCompletePart(part oss.UploadPart, dfsID string, chunkNumber int) error {
 	return nil
 }
 
-func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (int, string, error) {
+func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	allParts, has := completedParts[dfsID]
 	if !has || len(allParts) != chunk.TotalChunks {
 		go clearInit(dfsID)
-		return 500, "completePartsErr", nil
+		return chunk, 500, "completePartsErr", nil
 	}
 	b, err := getBucketInstance(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
 	if err != nil {
 		go clearInit(dfsID)
-		return 500, "connectionErr", err
+		return chunk, 500, "connectionErr", err
 	}
 	imur, err := getIMURS(dfsID, chunk.ChunkNumber, b)
 	if err != nil {
 		go clearInit(dfsID)
-		return 500, "imurErr", err
+		return chunk, 500, "imurErr", err
 	}
 	options := []oss.Option{
 		oss.ContentDisposition("filename=" + chunk.Filename),
@@ -151,11 +151,24 @@ func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (
 	_, err = b.CompleteMultipartUpload(imur, allParts, options...)
 	if err != nil {
 		go clearInit(dfsID)
-		return 500, "completeErr", err
+		return chunk, 500, "completeErr", err
 	}
 	err = b.SetObjectMeta(dfsID, options...)
+	if h, err := b.GetObjectDetailedMeta(dfsID); err == nil {
+		chunk.ContentType = h.Get("Content-Type")
+	}
+	chunk.Bucket = b.BucketName
+	chunk.Endpoint = utils.GetEndpointByPrefer(prefer)
+	chunk.DfsID = dfsID
+	if chunk.DownValidTo > 0 {
+		var urlRS map[string]string
+		urlRS, err = GetTempDownURLFileName(b.BucketName, dfsID, chunk.DownValidTo)
+		if url, has := urlRS["url"]; has && url != "" {
+			chunk.DownURL = url
+		}
+	}
 	go clearInit(dfsID)
-	return 200, dfsID, err
+	return chunk, 200, dfsID, err
 }
 
 func clearInit(dfsID string) {

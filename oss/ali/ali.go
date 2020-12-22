@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"mime/multipart"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -64,7 +65,7 @@ func InitBucket(prefer, bucket string) (*oss.Bucket, error) {
 	return nil, err
 }
 
-// AliPutByteFile 用于字节文件上传
+// PutByteFile 用于字节文件上传
 // need config:
 // 需要config:
 // "oss": {
@@ -88,20 +89,38 @@ func InitBucket(prefer, bucket string) (*oss.Bucket, error) {
 // 		  }
 //     }
 //   },
-func AliPutByteFile(prefer, dfsID, bucketType string, o map[string]string, f []byte) error {
+func PutByteFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, o map[string]string, f []byte) (utils.ChunksObj, error) {
 	prefer, bn := utils.GetByBucketPrefer(prefer, bucketType)
 	if bn != "" && prefer != "" {
 		b, err := InitBucket(prefer, bn)
 		if err == nil {
 			options := initOptions(o)
-			return b.PutObject(dfsID, bytes.NewReader(f), options...)
+			err = b.PutObject(dfsID, bytes.NewReader(f), options...)
+			if err == nil {
+				ct, h := o["contentType"]
+				if !h || ct == "" {
+					ct = http.DetectContentType(f)
+				}
+				chunk.ContentType = ct
+				chunk.Bucket = bn
+				chunk.Endpoint = utils.GetEndpointByPrefer(prefer)
+				chunk.DfsID = dfsID
+				chunk.TotalSize = int64(len(f))
+				if chunk.DownValidTo > 0 {
+					var urlRS map[string]string
+					urlRS, err = GetTempDownURLFileName(bn, dfsID, chunk.DownValidTo)
+					if url, has := urlRS["url"]; has && url != "" {
+						chunk.DownURL = url
+					}
+				}
+			}
 		}
-		return err
+		return chunk, err
 	}
-	return errors.New("bucketNotExist")
+	return chunk, errors.New("bucketNotExist")
 }
 
-// AliPutFile 文件方式上传
+// PutFile 文件方式上传
 // need config:
 // 需要config:
 // "oss": {
@@ -125,28 +144,43 @@ func AliPutByteFile(prefer, dfsID, bucketType string, o map[string]string, f []b
 // 		  }
 //     }
 //   },
-func AliPutFile(prefer, dfsID, bucketType string, ossFile *multipart.FileHeader) error {
+func PutFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, ossFile *multipart.FileHeader) (utils.ChunksObj, error) {
 	prefer, bn := utils.GetByBucketPrefer(prefer, bucketType)
+	chunk.Bucket = bn
 	if bn != "" && prefer != "" {
 		b, err := InitBucket(prefer, bn)
 		if err == nil {
 			options := []oss.Option{
 				oss.ContentDisposition(fmt.Sprintf("filename=%s", ossFile.Filename)),
 			}
-			ct, has := ossFile.Header["Content-Type"]
-			if has && len(ct) > 0 {
-				options = append(options, oss.ContentType(ct[0]))
+			ct := ossFile.Header.Get("Content-Type")
+			if ct != "" {
+				options = append(options, oss.ContentType(ct))
 			}
 			f, err := ossFile.Open()
 			if err != nil {
-				return err
+				return chunk, err
 			}
 			defer f.Close()
-			return b.PutObject(dfsID, f, options...)
+			err = b.PutObject(dfsID, f, options...)
+			if err == nil {
+				chunk.ContentType = ct
+				chunk.Bucket = bn
+				chunk.Endpoint = utils.GetEndpointByPrefer(prefer)
+				chunk.DfsID = dfsID
+				chunk.TotalSize = ossFile.Size
+				if chunk.DownValidTo > 0 {
+					var urlRS map[string]string
+					urlRS, err = GetTempDownURLFileName(bn, dfsID, chunk.DownValidTo)
+					if url, has := urlRS["url"]; has && url != "" {
+						chunk.DownURL = url
+					}
+				}
+			}
 		}
-		return err
+		return chunk, err
 	}
-	return errors.New("bucketNotExist")
+	return chunk, errors.New("bucketNotExist")
 }
 
 func initOptions(o map[string]string) []oss.Option {
@@ -162,8 +196,13 @@ func initOptions(o map[string]string) []oss.Option {
 	return options
 }
 
-// AliGetTempDownURLFileName get temp download url from oss
-func AliGetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[string]string, error) {
+// GetTempDownURLFileName get temp download url from oss
+// return example:
+// {
+// 	"url":"xxx",
+// 	"fileName":"xxx"
+// }
+func GetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[string]string, error) {
 	var b *oss.Bucket
 	var err error
 	var endPoint string
@@ -201,8 +240,8 @@ func AliGetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[str
 	return rs, errors.New("unknownErr")
 }
 
-// AliGetFile get file bytes, filename,content-type, size from ali oss
-func AliGetFile(bucketName, dfsID string) ([]byte, string, string, int64, error) {
+// GetFile get file bytes, filename,content-type, size from ali oss
+func GetFile(bucketName, dfsID string) ([]byte, string, string, int64, error) {
 	prefer, bn := utils.GetPreferByBucketName(bucketName)
 	if bn != "" && prefer != "" {
 		b, err := InitBucket(prefer, bn)

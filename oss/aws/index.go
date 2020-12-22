@@ -50,15 +50,15 @@ func init() {
 // 200 OK client need to ignore this part
 // 300 dfsID caller should do other thing, then client can get success upload infor
 // 500 client need to upload whole file again
-func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (int, string, error) {
+func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
 	if !checkPartNumberUploaded(chunk.ChunkNumber, dfsID) {
-		return 400, "NotExist", nil
+		return chunk, 400, "NotExist", nil
 	}
 	if checkAllPartsUploaded(chunk.TotalChunks, dfsID) {
 		return completeChunksUpload(userID, prefer, dfsID, chunk)
 	}
-	return 200, "OK", nil
+	return chunk, 200, "OK", nil
 }
 
 // ChunkUploadPostStream chunk upload for post
@@ -66,24 +66,24 @@ func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (
 // 200 OK client need to ignore this part
 // 300 dfsID caller should do other thing, then client can get success upload infor
 // 500 client need to upload whole file again
-func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (int, string, error) {
+func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
 	b, err := getBucketInstance(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
 	if err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	imur, err := getIMURS(prefer, chunk.Bucket, dfsID, chunk.Filename, chunk.ChunkNumber, b)
 	if err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	f, err := fileChunk.Open()
 	if err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	defer f.Close()
 	buf := bytes.NewBuffer(nil)
 	if _, err := io.Copy(buf, f); err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 
 	fileBytes := buf.Bytes()
@@ -99,7 +99,7 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 
 	uploadResult, err := b.UploadPart(partInput)
 	if err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	chunkPart := &s3.CompletedPart{
 		ETag:       uploadResult.ETag,
@@ -108,12 +108,12 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 	f.Close()
 	err = setCompletePart(chunkPart, dfsID, chunk.ChunkNumber)
 	if err != nil {
-		return 400, "NotExist", err
+		return chunk, 400, "NotExist", err
 	}
 	if checkAllPartsUploaded(chunk.TotalChunks, dfsID) {
 		return completeChunksUpload(userID, prefer, dfsID, chunk)
 	}
-	return 200, "OK", nil
+	return chunk, 200, "OK", nil
 }
 
 func setCompletePart(part *s3.CompletedPart, dfsID string, chunkNumber int) error {
@@ -148,21 +148,21 @@ func setCompletePart(part *s3.CompletedPart, dfsID string, chunkNumber int) erro
 	return nil
 }
 
-func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (int, string, error) {
+func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	allParts, has := completedParts[dfsID]
 	if !has || len(allParts) != chunk.TotalChunks {
 		go clearInit(dfsID)
-		return 500, "completePartsErr", nil
+		return chunk, 500, "completePartsErr", nil
 	}
 	b, err := getBucketInstance(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
 	if err != nil {
 		go clearInit(dfsID)
-		return 500, "connectionErr", err
+		return chunk, 500, "connectionErr", err
 	}
 	imur, err := getIMURS(prefer, chunk.Bucket, dfsID, chunk.Filename, chunk.ChunkNumber, b)
 	if err != nil {
 		go clearInit(dfsID)
-		return 500, "imurErr", err
+		return chunk, 500, "imurErr", err
 	}
 	completeInput := &s3.CompleteMultipartUploadInput{
 		Bucket:   imur.Bucket,
@@ -175,10 +175,27 @@ func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (
 	_, err = b.CompleteMultipartUpload(completeInput)
 	if err != nil {
 		go clearInit(dfsID)
-		return 500, "completeErr", err
+		return chunk, 500, "completeErr", err
+	}
+	objHeader, err := b.HeadObject(&s3.HeadObjectInput{
+		Bucket: imur.Bucket,
+		Key:    imur.Key,
+	})
+	if err == nil {
+		chunk.ContentType = *objHeader.ContentType
+	}
+	chunk.Bucket = *imur.Bucket
+	chunk.Endpoint = utils.GetEndpointByPrefer(prefer)
+	chunk.DfsID = dfsID
+	if chunk.DownValidTo > 0 {
+		var urlRS map[string]string
+		urlRS, err = GetTempDownURLFileName(*imur.Bucket, dfsID, chunk.DownValidTo)
+		if url, has := urlRS["url"]; has && url != "" {
+			chunk.DownURL = url
+		}
 	}
 	go clearInit(dfsID)
-	return 200, dfsID, err
+	return chunk, 200, dfsID, err
 }
 
 func clearInit(dfsID string) {

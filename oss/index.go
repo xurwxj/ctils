@@ -11,7 +11,7 @@ import (
 )
 
 // ChunkUploadGetStream auto upload file chunk check of get method by cloud
-func ChunkUploadGetStream(userID, prefer string, chunk utils.ChunksObj) (int, string, error) {
+func ChunkUploadGetStream(userID, prefer string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	if prefer == "" {
 		prefer = "default"
 	}
@@ -25,11 +25,11 @@ func ChunkUploadGetStream(userID, prefer string, chunk utils.ChunksObj) (int, st
 	case "aws":
 		return aws.ChunkUploadGetStream(userID, prefer, cloud, chunk)
 	}
-	return 500, "unknownErr", fmt.Errorf("unknownErr")
+	return chunk, 500, "unknownErr", fmt.Errorf("unknownErr")
 }
 
 // ChunkUploadPostStream auto upload file chunk by cloud
-func ChunkUploadPostStream(userID, prefer string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (int, string, error) {
+func ChunkUploadPostStream(userID, prefer string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	if prefer == "" {
 		prefer = "default"
 	}
@@ -43,43 +43,45 @@ func ChunkUploadPostStream(userID, prefer string, chunk utils.ChunksObj, fileChu
 	case "aws":
 		return aws.ChunkUploadPostStream(userID, prefer, cloud, chunk, fileChunk)
 	}
-	return 500, "unknownErr", fmt.Errorf("unknownErr")
+	return chunk, 500, "unknownErr", fmt.Errorf("unknownErr")
 }
 
 // PutByteFile auto upload file Byte by cloud
-func PutByteFile(prefer, dfsID, bucketType string, o map[string]string, f []byte) error {
+func PutByteFile(prefer, dfsID string, chunk utils.ChunksObj, o map[string]string, f []byte) (utils.ChunksObj, error) {
 	if prefer == "" {
 		prefer = "default"
 	}
-	if bucketType == "" {
-		bucketType = "data"
+	bucketType := "data"
+	if chunk.Bucket != "" {
+		bucketType = chunk.Bucket
 	}
 	cloud := viper.GetString("oss.cloud")
 	switch cloud {
 	case "aliyun":
-		return ali.AliPutByteFile(prefer, dfsID, bucketType, o, f)
+		return ali.PutByteFile(prefer, dfsID, bucketType, chunk, o, f)
 	case "aws":
-		return aws.AWSPutByteFile(prefer, dfsID, bucketType, o, f)
+		return aws.PutByteFile(prefer, dfsID, bucketType, chunk, o, f)
 	}
-	return fmt.Errorf("unknownErr")
+	return chunk, fmt.Errorf("unknownErr")
 }
 
 // PutFile auto upload file by cloud
-func PutFile(prefer, dfsID, bucketType string, ossFile *multipart.FileHeader) error {
+func PutFile(prefer, dfsID string, chunk utils.ChunksObj, ossFile *multipart.FileHeader) (utils.ChunksObj, error) {
 	if prefer == "" {
 		prefer = "default"
 	}
-	if bucketType == "" {
-		bucketType = "data"
+	bucketType := "data"
+	if chunk.Bucket != "" {
+		bucketType = chunk.Bucket
 	}
 	cloud := viper.GetString("oss.cloud")
 	switch cloud {
 	case "aliyun":
-		return ali.AliPutFile(prefer, dfsID, bucketType, ossFile)
+		return ali.PutFile(prefer, dfsID, bucketType, chunk, ossFile)
 	case "aws":
-		return aws.AWSPutFile(prefer, dfsID, bucketType, ossFile)
+		return aws.PutFile(prefer, dfsID, bucketType, chunk, ossFile)
 	}
-	return fmt.Errorf("unknownErr")
+	return chunk, fmt.Errorf("unknownErr")
 }
 
 // GetFile get file bytes,name,content-type, size auto by cloud
@@ -87,9 +89,9 @@ func GetFile(bucketName, dfsID string) ([]byte, string, string, int64, error) {
 	cloud := viper.GetString("oss.cloud")
 	switch cloud {
 	case "aliyun":
-		return ali.AliGetFile(bucketName, dfsID)
+		return ali.GetFile(bucketName, dfsID)
 	case "aws":
-		return aws.AWSGetFile(bucketName, dfsID)
+		return aws.GetFile(bucketName, dfsID)
 	}
 	return nil, "", "", 0, fmt.Errorf("unknownErr")
 }
@@ -99,9 +101,9 @@ func GetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[string
 	cloud := viper.GetString("oss.cloud")
 	switch cloud {
 	case "aliyun":
-		return ali.AliGetTempDownURLFileName(bucketName, dfsID, expires)
+		return ali.GetTempDownURLFileName(bucketName, dfsID, expires)
 	case "aws":
-		return aws.AWSGetTempDownURLFileName(bucketName, dfsID, expires)
+		return aws.GetTempDownURLFileName(bucketName, dfsID, expires)
 	}
 	return map[string]string{}, fmt.Errorf("unknownErr")
 }

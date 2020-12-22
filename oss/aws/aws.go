@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"mime/multipart"
+	"net/http"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 	"github.com/xurwxj/viper"
 )
 
-// AWSPutFile need config:
+// PutFile need config:
 // 需要config:
 // "oss": {
 //     "cloud": "aws",
@@ -40,7 +41,7 @@ import (
 // 		  }
 //     }
 //   },
-func AWSPutFile(prefer, dfsID, bucketType string, c *multipart.FileHeader) error {
+func PutFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, c *multipart.FileHeader) (utils.ChunksObj, error) {
 	if prefer == "" {
 		prefer = "default"
 	}
@@ -60,43 +61,59 @@ func AWSPutFile(prefer, dfsID, bucketType string, c *multipart.FileHeader) error
 	accessKey := viper.GetString(fmt.Sprintf("oss.%s.accessKey", prefer))
 	accessSecret := viper.GetString(fmt.Sprintf("oss.%s.accessSecret", prefer))
 	if endpoint == "" || accessKey == "" || accessSecret == "" {
-		return fmt.Errorf("authParamsErr")
+		return chunk, fmt.Errorf("authParamsErr")
 	}
 
 	creds := credentials.NewStaticCredentials(accessKey, accessSecret, "")
 	_, err := creds.Get()
 	if err != nil {
-		return fmt.Errorf("authErr: %s", err)
+		return chunk, fmt.Errorf("authErr: %s", err)
 	}
 	sess := s3sses.Must(s3sses.NewSession(aws.NewConfig().WithRegion(endpoint).WithCredentials(creds)))
 	uploader := s3manager.NewUploader(sess)
 
 	f, err := c.Open()
 	if err != nil {
-		return err
+		return chunk, err
 	}
 	defer f.Close()
 
-	ct := "application/octet-stream"
-	cts, has := c.Header["Content-Type"]
-	if has && len(cts) > 0 {
-		ct = cts[0]
+	ct := ""
+	cts := c.Header.Get("Content-Type")
+	if cts != "" {
+		ct = cts
 	}
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	bn := viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", prefer, bucketType))
 	if _, err := uploader.Upload(&s3manager.UploadInput{
-		Bucket:             aws.String(viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", prefer, bucketType))),
+		Bucket:             aws.String(bn),
 		Key:                aws.String(dfsID),
 		ContentType:        aws.String(ct),
 		ACL:                aws.String(filePerm),
 		ContentDisposition: aws.String(fmt.Sprintf("filename=%s", fileName)),
 		Body:               f,
 	}); err != nil {
-		return fmt.Errorf("uploadErr: %s", err)
+		return chunk, fmt.Errorf("uploadErr: %s", err)
+	} else {
+		chunk.ContentType = ct
+		chunk.Bucket = bn
+		chunk.Endpoint = endpoint
+		chunk.DfsID = dfsID
+		chunk.TotalSize = c.Size
+		if chunk.DownValidTo > 0 {
+			var urlRS map[string]string
+			urlRS, err = GetTempDownURLFileName(bn, dfsID, chunk.DownValidTo)
+			if url, has := urlRS["url"]; has && url != "" {
+				chunk.DownURL = url
+			}
+		}
 	}
-
-	return nil
+	return chunk, nil
 }
 
-// AWSPutByteFile need config:
+// PutByteFile need config:
 // 需要config:
 // "oss": {
 //     "cloud": "aws",
@@ -119,7 +136,7 @@ func AWSPutFile(prefer, dfsID, bucketType string, c *multipart.FileHeader) error
 // 		  }
 //     }
 //   },
-func AWSPutByteFile(prefer, dfsID, bucketType string, o map[string]string, c []byte) error {
+func PutByteFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, o map[string]string, c []byte) (utils.ChunksObj, error) {
 	if prefer == "" {
 		prefer = "default"
 	}
@@ -130,7 +147,7 @@ func AWSPutByteFile(prefer, dfsID, bucketType string, o map[string]string, c []b
 	if bucketType == "pub" {
 		filePerm = "public-read"
 	}
-	contentType := "application/octet-stream"
+	contentType := ""
 	fileName := dfsID[strings.LastIndex(dfsID, "/"):]
 	for k, v := range o {
 		switch k {
@@ -140,37 +157,57 @@ func AWSPutByteFile(prefer, dfsID, bucketType string, o map[string]string, c []b
 			contentType = v
 		}
 	}
+	if contentType == "" {
+		contentType = http.DetectContentType(c)
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
 	endpoint := viper.GetString(fmt.Sprintf("oss.%s.endpoint", prefer))
 	accessKey := viper.GetString(fmt.Sprintf("oss.%s.accessKey", prefer))
 	accessSecret := viper.GetString(fmt.Sprintf("oss.%s.accessSecret", prefer))
 	if endpoint == "" || accessKey == "" || accessSecret == "" {
-		return fmt.Errorf("authParamsErr")
+		return chunk, fmt.Errorf("authParamsErr")
 	}
 
 	creds := credentials.NewStaticCredentials(accessKey, accessSecret, "")
 	_, err := creds.Get()
 	if err != nil {
-		return fmt.Errorf("authErr: %s", err)
+		return chunk, fmt.Errorf("authErr: %s", err)
 	}
 	sess := s3sses.Must(s3sses.NewSession(aws.NewConfig().WithRegion(endpoint).WithCredentials(creds)))
 	uploader := s3manager.NewUploader(sess)
 
+	bn := viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", prefer, bucketType))
 	if _, err := uploader.Upload(&s3manager.UploadInput{
-		Bucket:             aws.String(viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", prefer, bucketType))),
+		Bucket:             aws.String(bn),
 		Key:                aws.String(dfsID),
 		ContentType:        aws.String(contentType),
 		ACL:                aws.String(filePerm),
 		ContentDisposition: aws.String(fmt.Sprintf("filename=%s", fileName)),
 		Body:               bytes.NewReader(c),
 	}); err != nil {
-		return fmt.Errorf("uploadErr: %s", err)
+		return chunk, fmt.Errorf("uploadErr: %s", err)
+	} else {
+		chunk.ContentType = contentType
+		chunk.Bucket = bn
+		chunk.Endpoint = endpoint
+		chunk.DfsID = dfsID
+		chunk.TotalSize = int64(len(c))
+		if chunk.DownValidTo > 0 {
+			var urlRS map[string]string
+			urlRS, err = GetTempDownURLFileName(bn, dfsID, chunk.DownValidTo)
+			if url, has := urlRS["url"]; has && url != "" {
+				chunk.DownURL = url
+			}
+		}
 	}
 
-	return nil
+	return chunk, nil
 }
 
-// AWSGetTempDownURLFileName get temp download url from aws s3
-func AWSGetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[string]string, error) {
+// GetTempDownURLFileName get temp download url from aws s3
+func GetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[string]string, error) {
 	var endPoint string
 	rs := make(map[string]string)
 	prefer, bn := utils.GetPreferByBucketName(bucketName)
@@ -208,8 +245,8 @@ func AWSGetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[str
 	return rs, errors.New("unknownErr")
 }
 
-// AWSGetFile get file bytes, filename,content-type, size from aws s3
-func AWSGetFile(bucketName, dfsID string) ([]byte, string, string, int64, error) {
+// GetFile get file bytes, filename,content-type, size from aws s3
+func GetFile(bucketName, dfsID string) ([]byte, string, string, int64, error) {
 	var endPoint string
 	prefer, bn := utils.GetPreferByBucketName(bucketName)
 	if bn != "" && prefer != "" {
