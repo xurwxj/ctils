@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/xurwxj/ctils/oss/utils"
+	"github.com/xurwxj/gtils/base"
 	"github.com/xurwxj/viper"
 )
 
@@ -204,6 +207,92 @@ func PutByteFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, o map[
 	}
 
 	return chunk, nil
+}
+
+// ChunkUpload 文件分块上传
+// need config:
+// 需要config:
+// "oss": {
+// "chunkSize":5120000,
+//     "cloud": "aliyun",
+//     "xxx": {
+//       "endpoint": "xxx",
+//       "accessKey": "xxx",
+//       "accessSecret": "xxx",
+//   	 "bucket": {
+//  	    "data": "xxx",
+//  	    "pub": "xxx"
+// 		  }
+//     },
+//     "xxx": {
+//       "endpoint": "xxx",
+//       "accessKey": "xxx",
+//       "accessSecret": "xxx",
+//   	 "bucket": {
+//  	    "data": "xxx",
+//  	    "pub": "xxx"
+// 		  }
+//     }
+//   },
+// prefer 如果为空，则取Default
+// dfsID 调用SetMultiPartDfsID或是SetDfsID方法生成
+// bucketType 如果不传，则表示是data
+func ChunkUpload(prefer, dfsID, bucketType, filePath string) (bn, endpoint string, err error) {
+	if prefer == "" {
+		prefer = "default"
+	}
+	if bucketType == "" {
+		bucketType = "data"
+	}
+	filePerm := "authenticated-read"
+	if bucketType == "pub" {
+		filePerm = "public-read"
+	}
+	mime := base.GetFileMimeTypeExtByPath(filePath)
+	endpoint = viper.GetString(fmt.Sprintf("oss.%s.endpoint", prefer))
+	accessKey := viper.GetString(fmt.Sprintf("oss.%s.accessKey", prefer))
+	accessSecret := viper.GetString(fmt.Sprintf("oss.%s.accessSecret", prefer))
+	if endpoint == "" || accessKey == "" || accessSecret == "" {
+		err = fmt.Errorf("authParamsErr")
+		return
+	}
+
+	creds := credentials.NewStaticCredentials(accessKey, accessSecret, "")
+	_, err = creds.Get()
+	if err != nil {
+		return
+	}
+	sess := s3sses.Must(s3sses.NewSession(aws.NewConfig().WithRegion(endpoint).WithCredentials(creds)))
+	uploader := s3manager.NewUploader(sess)
+
+	bn = viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", prefer, bucketType))
+	if bn == "" {
+		err = fmt.Errorf("configErr")
+		return
+	}
+	tf, err := os.Open(filePath)
+	if err != nil {
+		return
+	}
+	defer tf.Close()
+	_, err = uploader.Upload(&s3manager.UploadInput{
+		Bucket:             aws.String(bn),
+		Key:                aws.String(dfsID),
+		ContentType:        aws.String(mime.String()),
+		ACL:                aws.String(filePerm),
+		ContentDisposition: aws.String(fmt.Sprintf("filename=%s", filepath.Base(filePath))),
+		Body:               tf,
+	}, func(u *s3manager.Uploader) {
+		chunkSize := viper.GetInt64("oss.chunkSize")
+		if chunkSize < 5242880 {
+			chunkSize = 5242880
+		}
+		u.PartSize = chunkSize
+	})
+	if err != nil {
+		return
+	}
+	return
 }
 
 // GetTempDownURLFileName get temp download url from aws s3

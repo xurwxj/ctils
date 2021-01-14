@@ -7,11 +7,14 @@ import (
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/xurwxj/ctils/oss/utils"
+	"github.com/xurwxj/gtils/base"
 	"github.com/xurwxj/viper"
 )
 
@@ -118,6 +121,88 @@ func PutByteFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, o map[
 		return chunk, err
 	}
 	return chunk, errors.New("bucketNotExist")
+}
+
+// ChunkUpload 文件分块上传
+// need config:
+// 需要config:
+// "oss": {
+// "chunkSize":5120000,
+//     "cloud": "aliyun",
+//     "xxx": {
+//       "endpoint": "xxx",
+//       "accessKey": "xxx",
+//       "accessSecret": "xxx",
+//   	 "bucket": {
+//  	    "data": "xxx",
+//  	    "pub": "xxx"
+// 		  }
+//     },
+//     "xxx": {
+//       "endpoint": "xxx",
+//       "accessKey": "xxx",
+//       "accessSecret": "xxx",
+//   	 "bucket": {
+//  	    "data": "xxx",
+//  	    "pub": "xxx"
+// 		  }
+//     }
+//   },
+// prefer 如果为空，则取Default
+// dfsID 调用SetMultiPartDfsID或是SetDfsID方法生成
+// bucketType 如果不传，则表示是data
+func ChunkUpload(prefer, dfsID, bucketType, filePath string) (bn, endpoint string, err error) {
+	prefer, bn = utils.GetByBucketPrefer(prefer, bucketType)
+	if bn == "" {
+		err = fmt.Errorf("configErr")
+		return
+	}
+	endpoint = utils.GetEndpointByPrefer(prefer)
+	chunkSize := viper.GetInt64("oss.chunkSize")
+	if chunkSize == 0 {
+		chunkSize = 5120000
+	}
+	chunks, err := oss.SplitFileByPartSize(filePath, chunkSize)
+	if err != nil {
+		return
+	}
+
+	tf, err := os.Open(filePath)
+	if err != nil {
+		return
+	}
+	defer tf.Close()
+
+	b, err := InitBucket(prefer, bn)
+	if err != nil {
+		return
+	}
+	imur, err := b.InitiateMultipartUpload(dfsID, oss.ObjectStorageClass(oss.StorageStandard))
+	mime := base.GetFileMimeTypeExtByPath(filePath)
+	options := []oss.Option{
+		oss.ContentDisposition("filename=" + filepath.Base(filePath)),
+		oss.ContentType(mime.String()),
+	}
+	var parts []oss.UploadPart
+	for _, chunk := range chunks {
+		tf.Seek(chunk.Offset, os.SEEK_SET)
+		// 调用UploadPart方法上传每个分片。
+		var part oss.UploadPart
+		part, err = b.UploadPart(imur, tf, chunk.Size, chunk.Number, options...)
+		if err != nil {
+			return
+		}
+		parts = append(parts, part)
+	}
+	objACL := oss.ObjectACL(oss.ACLPublicRead)
+	if bucketType != "pub" {
+		objACL = oss.ObjectACL(oss.ACLPrivate)
+	}
+	_, err = b.CompleteMultipartUpload(imur, parts, objACL)
+	if err != nil {
+		return
+	}
+	return
 }
 
 // PutFile 文件方式上传
