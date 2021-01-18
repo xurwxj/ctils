@@ -42,6 +42,16 @@ func GetPreferByBucketName(bucketName string) (string, string) {
 	return "", ""
 }
 
+// GetPreferByCoutryNode get prefer by bucket name
+func GetPreferByCoutryNode(countryNode string) string {
+	for k := range viper.GetStringMap("oss") {
+		if viper.GetString(fmt.Sprintf("oss.%s.countryNode", k)) == countryNode {
+			return k
+		}
+	}
+	return ""
+}
+
 // GetCoutryCodeByBucketName get oss countryCode by bucket name
 func GetCoutryCodeByBucketName(bucketName string) string {
 	for k := range viper.GetStringMap("oss") {
