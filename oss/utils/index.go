@@ -42,6 +42,18 @@ func GetPreferByBucketName(bucketName string) (string, string) {
 	return "", ""
 }
 
+// GetCoutryCodeByBucketName get oss countryCode by bucket name
+func GetCoutryCodeByBucketName(bucketName string) string {
+	for k := range viper.GetStringMap("oss") {
+		for s := range viper.GetStringMap(fmt.Sprintf("oss.%s.bucket", k)) {
+			if viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", k, s)) == bucketName {
+				return viper.GetString(fmt.Sprintf("oss.%s.countryNode", k))
+			}
+		}
+	}
+	return ""
+}
+
 // GetOSSPreferByCountryID get oss prefer region by countryID
 func GetOSSPreferByCountryID(countryID, GEO string) string {
 	prefer := "default"
