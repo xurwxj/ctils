@@ -202,6 +202,7 @@ func ChunkUpload(prefer, dfsID, bucketType, filePath string) (bn, endpoint strin
 	if err != nil {
 		return
 	}
+	b.SetObjectMeta(dfsID, options...)
 	return
 }
 
