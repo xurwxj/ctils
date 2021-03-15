@@ -19,10 +19,12 @@ import (
 // 		"accessSecret": "xxx",
 // 		"region": "xxx"
 //   },
-func AwsSMS(phone, message string) error {
+func AwsSMS(phone, sign, message string) error {
 	accessKey := viper.GetString("sms.accessKey")
 	accessSecret := viper.GetString("sms.accessSecret")
-	sign := viper.GetString("sms.sign")
+	if sign == "" {
+		sign = viper.GetString("sms.sign")
+	}
 	region := viper.GetString("sms.region")
 	if region == "" || accessKey == "" || accessSecret == "" {
 		return fmt.Errorf("AwsSMSAuthParamsErr")
