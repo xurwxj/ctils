@@ -11,7 +11,7 @@ import (
 )
 
 // ChunkUpload auto upload local file chunk check of get method by cloud
-func ChunkUpload(prefer, dfsID, bucketType, filePath string) (bn, endpoint string, err error) {
+func ChunkUpload(prefer, dfsID, bucketType, filePath, fileName string) (bn, endpoint string, err error) {
 	if prefer == "" {
 		prefer = "default"
 	}
@@ -21,9 +21,9 @@ func ChunkUpload(prefer, dfsID, bucketType, filePath string) (bn, endpoint strin
 	cloud := viper.GetString("oss.cloud")
 	switch cloud {
 	case "aliyun":
-		return ali.ChunkUpload(prefer, dfsID, bucketType, filePath)
+		return ali.ChunkUpload(prefer, dfsID, bucketType, filePath, fileName)
 	case "aws":
-		return aws.ChunkUpload(prefer, dfsID, bucketType, filePath)
+		return aws.ChunkUpload(prefer, dfsID, bucketType, filePath, fileName)
 	}
 	return "", "", fmt.Errorf("unknownErr")
 }

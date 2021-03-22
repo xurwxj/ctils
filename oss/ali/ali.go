@@ -151,7 +151,7 @@ func PutByteFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, o map[
 // prefer 如果为空，则取Default
 // dfsID 调用SetMultiPartDfsID或是SetDfsID方法生成
 // bucketType 如果不传，则表示是data
-func ChunkUpload(prefer, dfsID, bucketType, filePath string) (bn, endpoint string, err error) {
+func ChunkUpload(prefer, dfsID, bucketType, filePath, fileName string) (bn, endpoint string, err error) {
 	prefer, bn = utils.GetByBucketPrefer(prefer, bucketType)
 	if bn == "" {
 		err = fmt.Errorf("configErr")
@@ -179,8 +179,11 @@ func ChunkUpload(prefer, dfsID, bucketType, filePath string) (bn, endpoint strin
 	}
 	imur, err := b.InitiateMultipartUpload(dfsID, oss.ObjectStorageClass(oss.StorageStandard))
 	mime := base.GetFileMimeTypeExtByPath(filePath)
+	if fileName == "" {
+		fileName = filepath.Base(filePath)
+	}
 	options := []oss.Option{
-		oss.ContentDisposition("filename=" + filepath.Base(filePath)),
+		oss.ContentDisposition("filename=" + fileName),
 		oss.ContentType(mime.String()),
 	}
 	var parts []oss.UploadPart

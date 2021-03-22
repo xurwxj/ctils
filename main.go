@@ -14,7 +14,7 @@ func main() {
 
 func testChunkUpload() {
 	initConfig()
-	bn, endoint, err := aws.ChunkUpload("cnhz", "test/jkjkjsl", "pub", "../../../git.shining3d.com/cloud/algorithm/tmp/2021-01-08_003_111_谭彩红.zip")
+	bn, endoint, err := aws.ChunkUpload("cnhz", "test/jkjkjsl", "pub", "../../../git.shining3d.com/cloud/algorithm/tmp/2021-01-08_003_111_谭彩红.zip", "2021-01-08_003_111_谭彩红.zip")
 	// bn, endoint, err := ali.ChunkUpload("cnhz", "test/jkjkjsl", "pub", "../../../git.shining3d.com/cloud/algorithm/tmp/2021-01-08_003_111_谭彩红.zip")
 	fmt.Println("bn: ", bn)
 	fmt.Println("endoint: ", endoint)

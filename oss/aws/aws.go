@@ -237,7 +237,7 @@ func PutByteFile(prefer, dfsID, bucketType string, chunk utils.ChunksObj, o map[
 // prefer 如果为空，则取Default
 // dfsID 调用SetMultiPartDfsID或是SetDfsID方法生成
 // bucketType 如果不传，则表示是data
-func ChunkUpload(prefer, dfsID, bucketType, filePath string) (bn, endpoint string, err error) {
+func ChunkUpload(prefer, dfsID, bucketType, filePath, fileName string) (bn, endpoint string, err error) {
 	if prefer == "" {
 		prefer = "default"
 	}
@@ -275,12 +275,15 @@ func ChunkUpload(prefer, dfsID, bucketType, filePath string) (bn, endpoint strin
 		return
 	}
 	defer tf.Close()
+	if fileName == "" {
+		fileName = filepath.Base(filePath)
+	}
 	_, err = uploader.Upload(&s3manager.UploadInput{
 		Bucket:             aws.String(bn),
 		Key:                aws.String(dfsID),
 		ContentType:        aws.String(mime.String()),
 		ACL:                aws.String(filePerm),
-		ContentDisposition: aws.String(fmt.Sprintf("filename=%s", filepath.Base(filePath))),
+		ContentDisposition: aws.String(fmt.Sprintf("filename=%s", fileName)),
 		Body:               tf,
 	}, func(u *s3manager.Uploader) {
 		chunkSize := viper.GetInt64("oss.chunkSize")
