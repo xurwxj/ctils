@@ -16,8 +16,8 @@ func main() {
 
 func testSMSInvalid() {
 	initConfig()
-	err := sms.FetchSMSSendResult("15942397109")
-	// fmt.Println(emails)
+	smss, err := sms.FetchSMSSendResult("15942397109")
+	fmt.Println(smss)
 	fmt.Println(err)
 }
 

@@ -1,6 +1,6 @@
 module github.com/xurwxj/ctils
 
-go 1.15
+go 1.16
 
 require (
 	github.com/alibabacloud-go/darabonba-openapi v0.1.5
