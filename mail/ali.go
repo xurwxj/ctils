@@ -6,6 +6,9 @@ import (
 	"net/smtp"
 	"strings"
 
+	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
+	dm20151123 "github.com/alibabacloud-go/dm-20151123/client"
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/xurwxj/viper"
 )
 
@@ -67,4 +70,28 @@ func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 		}
 	}
 	return nil, nil
+}
+
+func FetchInvalidEmails() (rs []string, err error) {
+	config := &openapi.Config{
+		// 您的AccessKey ID
+		AccessKeyId: tea.String(viper.GetString("email.accessKey")),
+		// 您的AccessKey Secret
+		AccessKeySecret: tea.String(viper.GetString("email.accessSecret")),
+	}
+	// 访问的域名
+	config.Endpoint = tea.String(viper.GetString("email.domain"))
+	client, err := dm20151123.NewClient(config)
+	if err != nil {
+		return
+	}
+	req := &dm20151123.QueryInvalidAddressRequest{}
+	result, err := client.QueryInvalidAddress(req)
+	if err != nil {
+		return
+	}
+	for _, mailDetail := range result.Body.Data.MailDetail {
+		rs = append(rs, *mailDetail.ToAddress)
+	}
+	return
 }

@@ -4,12 +4,28 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/xurwxj/ctils/mail"
 	"github.com/xurwxj/ctils/oss/aws"
+	"github.com/xurwxj/ctils/sms"
 	"github.com/xurwxj/viper"
 )
 
 func main() {
-	testChunkUpload()
+	testSMSInvalid()
+}
+
+func testSMSInvalid() {
+	initConfig()
+	err := sms.FetchSMSSendResult("15942397109")
+	// fmt.Println(emails)
+	fmt.Println(err)
+}
+
+func testMailInvalid() {
+	initConfig()
+	emails, err := mail.FetchInvalidEmails()
+	fmt.Println(emails)
+	fmt.Println(err)
 }
 
 func testChunkUpload() {
