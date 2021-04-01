@@ -106,3 +106,16 @@ type SMSERRObj struct {
 	Phone      string `json:"phone"`
 	SendOn     string `json:"sendOn"`
 }
+
+type aliERR struct {
+	Code string `json:"Code"`
+}
+
+// ParseAliSMSSendERR parse error code
+func ParseAliSMSSendERR(err error) (code string) {
+	var rs aliERR
+	if jerr := json.Unmarshal([]byte(err.Error()), &rs); jerr == nil {
+		return rs.Code
+	}
+	return
+}
