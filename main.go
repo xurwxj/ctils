@@ -11,7 +11,14 @@ import (
 )
 
 func main() {
-	testSMSInvalid()
+	testAWSURL()
+}
+
+func testAWSURL() {
+	initConfig()
+	s, err := aws.GetTempDownURLFileName("tawsdown.dental3dcloud.com", "dentalFull/0b24e9e6c987ca31c849a34e234753f8", 864000)
+	fmt.Println(s)
+	fmt.Println(err)
 }
 
 func testSMSInvalid() {

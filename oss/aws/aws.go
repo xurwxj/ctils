@@ -326,9 +326,14 @@ func GetTempDownURLFileName(bucketName, dfsID string, expires int64) (map[string
 			return rs, err
 		}
 		rs["fileName"] = dfsID[strings.LastIndex(dfsID, "/"):]
-		cds := *ib.ContentDisposition
-		if cdvs := strings.Split(cds, "="); len(cdvs) == 2 {
-			rs["fileName"] = strings.TrimSpace(cdvs[1])
+		if ib != nil {
+			cds := ib.ContentDisposition
+			// fmt.Println("cds: ", cds)
+			if cds != nil {
+				if cdvs := strings.Split(*cds, "="); len(cdvs) == 2 {
+					rs["fileName"] = strings.TrimSpace(cdvs[1])
+				}
+			}
 		}
 		rs["url"] = urlStr
 		return rs, nil
