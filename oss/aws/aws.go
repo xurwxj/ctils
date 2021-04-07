@@ -244,10 +244,10 @@ func ChunkUpload(prefer, dfsID, bucketType, filePath, fileName string) (bn, endp
 	if bucketType == "" {
 		bucketType = "data"
 	}
-	filePerm := "authenticated-read"
-	if bucketType == "pub" {
-		filePerm = "public-read"
-	}
+	// filePerm := "authenticated-read"
+	// if bucketType == "pub" {
+	// 	filePerm = "public-read"
+	// }
 	mime := base.GetFileMimeTypeExtByPath(filePath)
 	endpoint = viper.GetString(fmt.Sprintf("oss.%s.endpoint", prefer))
 	accessKey := viper.GetString(fmt.Sprintf("oss.%s.accessKey", prefer))
@@ -257,14 +257,17 @@ func ChunkUpload(prefer, dfsID, bucketType, filePath, fileName string) (bn, endp
 		return
 	}
 
+	// fmt.Println(888)
 	creds := credentials.NewStaticCredentials(accessKey, accessSecret, "")
 	_, err = creds.Get()
 	if err != nil {
 		return
 	}
+	// fmt.Println(777)
 	sess := s3sses.Must(s3sses.NewSession(aws.NewConfig().WithRegion(endpoint).WithCredentials(creds)))
 	uploader := s3manager.NewUploader(sess)
 
+	// fmt.Println(333)
 	bn = viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", prefer, bucketType))
 	if bn == "" {
 		err = fmt.Errorf("configErr")
@@ -278,11 +281,12 @@ func ChunkUpload(prefer, dfsID, bucketType, filePath, fileName string) (bn, endp
 	if fileName == "" {
 		fileName = filepath.Base(filePath)
 	}
+	// fmt.Println(2222)
 	_, err = uploader.Upload(&s3manager.UploadInput{
-		Bucket:             aws.String(bn),
-		Key:                aws.String(dfsID),
-		ContentType:        aws.String(mime.String()),
-		ACL:                aws.String(filePerm),
+		Bucket:      aws.String(bn),
+		Key:         aws.String(dfsID),
+		ContentType: aws.String(mime.String()),
+		// ACL:                aws.String(filePerm),
 		ContentDisposition: aws.String(fmt.Sprintf("filename=%s", fileName)),
 		Body:               tf,
 	}, func(u *s3manager.Uploader) {

@@ -11,7 +11,15 @@ import (
 )
 
 func main() {
-	testAWSURL()
+	testAWSUpload()
+}
+
+func testAWSUpload() {
+	initConfig()
+	bn, es, err := aws.ChunkUpload("default", "ds/0b24e9e6c987ca31c849a34e234753f8", "", "./LICENSE", "license.txt")
+	fmt.Println(bn)
+	fmt.Println(es)
+	fmt.Println(err)
 }
 
 func testAWSURL() {
