@@ -88,6 +88,18 @@ func GetBucketTypeByNme(d string) string {
 	return ""
 }
 
+// GetCDNURLByBucket get cdnurl by bucket name under same endpoint
+func GetCDNURLByBucket(d string) string {
+	for k := range viper.GetStringMap("oss") {
+		for s := range viper.GetStringMap(fmt.Sprintf("oss.%s.bucket", k)) {
+			if viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", k, s)) == d {
+				return viper.GetString(fmt.Sprintf("oss.%s.cdnUrl", k))
+			}
+		}
+	}
+	return ""
+}
+
 // SetMultiPartDfsID gen unique dfsID by userID, cloud, ChunksObj
 func SetMultiPartDfsID(userID, cloud string, obj ChunksObj) string {
 	return SetDfsID(userID, obj.Filename, obj.Category, obj.SubCate, obj.RelativePath, obj.Identifier, cloud, obj.TotalSize)
