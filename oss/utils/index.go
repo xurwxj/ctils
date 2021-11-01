@@ -88,6 +88,38 @@ func GetBucketTypeByNme(d string) string {
 	return ""
 }
 
+// CheckBucketExistByNmeType check bucket name exist or not
+func CheckBucketExistByNmeType(targetBucket, bucketType string) bool {
+	for k := range viper.GetStringMap("oss") {
+		for s := range viper.GetStringMap(fmt.Sprintf("oss.%s", k)) {
+			if s == "bucket" {
+				for b := range viper.GetStringMap(fmt.Sprintf("oss.%s.bucket", k)) {
+					if viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", k, b)) == targetBucket && bucketType == b {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// CheckBucketExistByNme check bucket name exist or not
+func CheckBucketExistByNme(targetBucket string) bool {
+	for k := range viper.GetStringMap("oss") {
+		for s := range viper.GetStringMap(fmt.Sprintf("oss.%s", k)) {
+			if s == "bucket" {
+				for b := range viper.GetStringMap(fmt.Sprintf("oss.%s.bucket", k)) {
+					if viper.GetString(fmt.Sprintf("oss.%s.bucket.%s", k, b)) == targetBucket {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 // GetCDNURLByBucket get cdnurl by bucket name under same endpoint
 func GetCDNURLByBucket(d string) string {
 	for k := range viper.GetStringMap("oss") {
