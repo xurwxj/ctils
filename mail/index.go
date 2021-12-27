@@ -1,6 +1,8 @@
 package mail
 
 import (
+	"encoding/base64"
+
 	"github.com/xurwxj/gtils/net"
 	"github.com/xurwxj/viper"
 )
@@ -17,6 +19,7 @@ import (
 //   },
 func SendMail(to, fromUser, subject, body, mailType string) error {
 	cloud := viper.GetString("email.cloud")
+	subject = "=?UTF-8?B?" + base64.StdEncoding.EncodeToString([]byte(subject)) + "?="
 	switch cloud {
 	case "aliyun":
 		return AliSendMail(to, fromUser, subject, body, mailType)
