@@ -9,6 +9,7 @@ import (
 	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
 	dm20151123 "github.com/alibabacloud-go/dm-20151123/client"
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/xurwxj/gtils/base"
 	"github.com/xurwxj/viper"
 )
 
@@ -18,11 +19,19 @@ import (
 // 		"pwd": "xxx",
 // 		"host": "smtpdm.xxx.com:25"
 //   },
-func AliSendMail(to, fromUser, subject, body, mailType string) error {
+func AliSendMail(to, fromUser, subject, body, mailType string, options ...string) error {
 	if to != "" && subject != "" {
 		user := viper.GetString("email.account")
 		password := viper.GetString("email.pwd")
 		host := viper.GetString("email.host")
+		for i, o := range options {
+			if !base.FindInStringSlice([]string{"", "default"}, o) && i == 0 {
+				// fmt.Println(o)
+				user = viper.GetString(fmt.Sprintf("email.%s.account", o))
+				password = viper.GetString(fmt.Sprintf("email.%s.pwd", o))
+				host = viper.GetString(fmt.Sprintf("email.%s.host", o))
+			}
+		}
 		if password == "" || host == "" || user == "" {
 			return fmt.Errorf("authParamsErr")
 		}

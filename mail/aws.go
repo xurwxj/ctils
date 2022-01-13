@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	s3sses "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ses"
+	"github.com/xurwxj/gtils/base"
 	"github.com/xurwxj/viper"
 )
 
@@ -19,13 +20,22 @@ import (
 // 		"accessSecret": "xxx",
 // 		"region": "xxx"
 //   },
-func AwsSendMail(to, fromUser, subject, body, mailType string) error {
+func AwsSendMail(to, fromUser, subject, body, mailType string, options ...string) error {
 	// The character encoding for the email.
 	CharSet := "UTF-8"
 	accessKey := viper.GetString("email.accessKey")
 	accessSecret := viper.GetString("email.accessSecret")
 	region := viper.GetString("email.region")
 	user := viper.GetString("email.account")
+	for i, o := range options {
+		if !base.FindInStringSlice([]string{"", "default"}, o) && i == 0 {
+			// fmt.Println(o)
+			accessKey = viper.GetString(fmt.Sprintf("email.%s.accessKey", o))
+			accessSecret = viper.GetString(fmt.Sprintf("email.%s.accessSecret", o))
+			region = viper.GetString(fmt.Sprintf("email.%s.region", o))
+			user = viper.GetString(fmt.Sprintf("email.%s.account", o))
+		}
+	}
 	if user == "" || region == "" || accessKey == "" || accessSecret == "" {
 		return fmt.Errorf("authParamsErr!")
 	}
