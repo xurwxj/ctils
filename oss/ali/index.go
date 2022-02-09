@@ -1,17 +1,28 @@
 package ali
 
 import (
+	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/xurwxj/ctils/oss/utils"
+	"github.com/xurwxj/ctils/sessions"
 )
 
+type BucketInfo struct {
+	OsBucket map[string]*oss.Bucket
+	Lock     sync.Locker
+}
+
+var bsCS BucketInfo
+
 var bs map[string]*oss.Bucket
+
 var chunkBS map[string]int
 var imurs map[string]oss.InitiateMultipartUploadResult
 var chunkIMURS map[string]int
@@ -20,6 +31,11 @@ var completedParts map[string][]oss.UploadPart
 
 func init() {
 	fmt.Println("ali oss upload init() starting...")
+	if bsCS.OsBucket == nil || len(bsCS.OsBucket) < 1 {
+		bsCS = BucketInfo{
+			OsBucket: make(map[string]*oss.Bucket),
+		}
+	}
 	if bs == nil || len(bs) < 1 {
 		bs = make(map[string]*oss.Bucket)
 	}
@@ -52,6 +68,17 @@ func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (
 	}
 	if checkAllPartsUploaded(chunk.TotalChunks, dfsID) {
 		return completeChunksUpload(userID, prefer, dfsID, chunk)
+	}
+	return chunk, 200, "OK", nil
+}
+
+func ChunkUploadGetStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
+	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
+	if !checkPartNumberUploadedCS(chunk.ChunkNumber, dfsID) {
+		return chunk, 400, "NotExist", nil
+	}
+	if checkAllPartsUploadedCS(chunk.TotalChunks, dfsID) {
+		return completeChunksUploadCS(userID, prefer, dfsID, chunk)
 	}
 	return chunk, 200, "OK", nil
 }
@@ -171,6 +198,50 @@ func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (
 	return chunk, 200, "DONE", err
 }
 
+func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
+	tallParts := sessions.SESS.GetCompletePart(dfsID)
+	allParts := make([]oss.UploadPart, 0)
+	json.Unmarshal(tallParts, &allParts)
+
+	if len(allParts) != chunk.TotalChunks {
+		clearInitCS(dfsID)
+		return chunk, 500, "completePartsErr", nil
+	}
+	b, err := getBucketInstanceCS(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
+	if err != nil {
+		clearInitCS(dfsID)
+		return chunk, 500, "connectionErr", err
+	}
+	imur, err := getIMURSCS(dfsID, chunk.ChunkNumber, b)
+	if err != nil {
+		clearInitCS(dfsID)
+		return chunk, 500, "imurErr", err
+	}
+	options := []oss.Option{
+		oss.ContentDisposition("filename=" + chunk.Filename),
+	}
+	_, err = b.CompleteMultipartUpload(imur, allParts, options...)
+	if err != nil {
+		clearInitCS(dfsID)
+		return chunk, 500, "completeErr", err
+	}
+	err = b.SetObjectMeta(dfsID, options...)
+	if h, err := b.GetObjectDetailedMeta(dfsID); err == nil {
+		chunk.ContentType = h.Get("Content-Type")
+	}
+	chunk.Bucket = b.BucketName
+	chunk.Endpoint = utils.GetEndpointByPrefer(prefer)
+	chunk.DfsID = dfsID
+	if chunk.DownValidTo > 0 {
+		var urlRS map[string]string
+		urlRS, err = GetTempDownURLFileName(b.BucketName, dfsID, chunk.DownValidTo)
+		if url, has := urlRS["url"]; has && url != "" {
+			chunk.DownURL = url
+		}
+	}
+	go clearInitCS(dfsID)
+	return chunk, 200, "DONE", err
+}
 func clearInit(dfsID string) {
 	delete(bs, dfsID)
 	delete(chunkBS, dfsID)
@@ -180,6 +251,12 @@ func clearInit(dfsID string) {
 	delete(completedParts, dfsID)
 }
 
+func clearInitCS(dfsID string) {
+	sessions.SESS.DelAllParts(dfsID)
+	bsCS.Lock.Lock()
+	defer bsCS.Lock.Unlock()
+	delete(bsCS.OsBucket, dfsID)
+}
 func getIMURS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMultipartUploadResult, error) {
 	t, h := chunkIMURS[dfsID]
 	imur, has := imurs[dfsID]
@@ -187,6 +264,7 @@ func getIMURS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMultipa
 		time.Sleep(1 * time.Second)
 		return getIMURS(dfsID, chunkNumber, b)
 	}
+	//TODO b判断有问题
 	if has && b != nil {
 		return imur, nil
 	}
@@ -196,6 +274,28 @@ func getIMURS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMultipa
 		return oss.InitiateMultipartUploadResult{}, err
 	}
 	imurs[dfsID] = imur
+	return imur, nil
+}
+
+func getIMURSCS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMultipartUploadResult, error) {
+	t := sessions.SESS.GetChunkIMURS(dfsID)
+	timur := sessions.SESS.GetImurs(dfsID)
+	imur := oss.InitiateMultipartUploadResult{}
+	json.Unmarshal(timur, &imur)
+	if t > 0 && (imur.UploadID == "") {
+		time.Sleep(1 * time.Second)
+		return getIMURSCS(dfsID, chunkNumber, b)
+	}
+
+	if b == nil {
+		return imur, nil
+	}
+	sessions.SESS.SetChunkIMURS(dfsID, chunkNumber)
+	imur, err := b.InitiateMultipartUpload(dfsID)
+	if err != nil {
+		return oss.InitiateMultipartUploadResult{}, err
+	}
+	sessions.SESS.SetImurs(dfsID, imur)
 	return imur, nil
 }
 
@@ -219,6 +319,26 @@ func getBucketInstance(prefer, bucketType, dfsID string, chunkNumber int) (*oss.
 	return b, nil
 }
 
+func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*oss.Bucket, error) {
+	t := sessions.SESS.GetChunkBS(dfsID)
+	b, has := bs[dfsID]
+	if t > 0 && (b == nil || !has) {
+		time.Sleep(1 * time.Second)
+		return getBucketInstance(prefer, bucketType, dfsID, chunkNumber)
+	}
+	if has && b != nil {
+		return b, nil
+	}
+	sessions.SESS.SetChunkBS(dfsID, chunkNumber)
+	prefer, bucket := utils.GetByBucketPrefer(prefer, bucketType)
+	b, err := InitBucket(prefer, bucket)
+	if err != nil {
+		return nil, err
+	}
+	bs[dfsID] = b
+	return b, nil
+}
+
 func checkAllPartsUploaded(totals int, dfsID string) bool {
 	cps, has := completedParts[dfsID]
 	if has && len(cps) == totals {
@@ -227,11 +347,30 @@ func checkAllPartsUploaded(totals int, dfsID string) bool {
 	return false
 }
 
+func checkAllPartsUploadedCS(totals int, dfsID string) bool {
+	cps := sessions.SESS.GetCompletePart(dfsID)
+	return len(cps) == totals
+}
+
 func checkPartNumberUploaded(chunkNumber int, dfsID string) bool {
 	cps, has := completedParts[dfsID]
 	if has && len(cps) > 0 {
 		for _, cp := range cps {
 			if cp.PartNumber == chunkNumber {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func checkPartNumberUploadedCS(chunkNumber int, dfsID string) bool {
+	cps := sessions.SESS.GetCompletePart(dfsID)
+	allPorts := make([]oss.UploadPart, 0)
+	json.Unmarshal(cps, &allPorts)
+	if len(allPorts) > 0 {
+		for _, port := range allPorts {
+			if port.PartNumber == chunkNumber {
 				return true
 			}
 		}
