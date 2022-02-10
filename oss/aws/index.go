@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	s3sses "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/xurwxj/ctils/common"
 	"github.com/xurwxj/ctils/log"
 	"github.com/xurwxj/ctils/oss/utils"
 	"github.com/xurwxj/ctils/sessions"
@@ -223,9 +224,28 @@ func setCompletePartCS(part *s3.CompletedPart, dfsID string, chunkNumber int) er
 			return *allParts[i].PartNumber-*allParts[j].PartNumber < 0
 		})
 	}
-	sessions.SESS.SetCompletePart(dfsID, allParts)
+	redisParts := iniRedisCompletePart(allParts)
+	sessions.SESS.SetCompletePart(dfsID, redisParts)
 	sessions.SESS.DelChunkParts(dfsID)
 	return nil
+}
+
+func iniRedisCompletePart(allParts []*s3.CompletedPart) (redisParts []common.CompletedPart) {
+	redisParts = make([]common.CompletedPart, 0)
+	for _, v := range allParts {
+		tmp := common.CompletedPart{
+			ETag:       "",
+			PartNumber: 0,
+		}
+		if v.ETag != nil {
+			tmp.ETag = *v.ETag
+		}
+		if v.PartNumber != nil {
+			tmp.PartNumber = *v.PartNumber
+		}
+		redisParts = append(redisParts, tmp)
+	}
+	return
 }
 
 func setCompletePart(part *s3.CompletedPart, dfsID string, chunkNumber int) error {
@@ -421,12 +441,12 @@ func getIMURSCS(prefer, bucketType, dfsID, fileName string, chunkNumber int, b *
 		time.Sleep(1 * time.Second)
 		return getIMURSCS(prefer, bucketType, dfsID, fileName, chunkNumber, b)
 	}
-	if b != nil {
+	if imur.UploadId != nil {
 		return imur, nil
 	}
 	sessions.SESS.SetChunkIMURS(dfsID, chunkNumber)
 
-	prefer, bucket := utils.GetByBucketPrefer(prefer, bucketType)
+	_, bucket := utils.GetByBucketPrefer(prefer, bucketType)
 	input := s3.CreateMultipartUploadInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(dfsID),
@@ -441,10 +461,63 @@ func getIMURSCS(prefer, bucketType, dfsID, fileName string, chunkNumber int, b *
 	if err != nil {
 		return imur, err
 	}
-	sessions.SESS.SetImurs(dfsID, imur)
+	redisImur := initRedisImur(imur)
+	sessions.SESS.SetImurs(dfsID, redisImur)
 	return imur, nil
 }
-
+func initRedisImur(imur *s3.CreateMultipartUploadOutput) (redisImur *common.CreateMultipartUploadOutput) {
+	redisImur = &common.CreateMultipartUploadOutput{
+		AbortDate:               time.Time{},
+		AbortRuleId:             "",
+		Bucket:                  "",
+		BucketKeyEnabled:        false,
+		Key:                     "",
+		RequestCharged:          "",
+		SSECustomerAlgorithm:    "",
+		SSECustomerKeyMD5:       "",
+		SSEKMSEncryptionContext: "",
+		SSEKMSKeyId:             "",
+		ServerSideEncryption:    "",
+		UploadId:                "",
+	}
+	if imur.AbortDate != nil {
+		redisImur.AbortDate = *imur.AbortDate
+	}
+	if imur.AbortRuleId != nil {
+		redisImur.AbortRuleId = *imur.AbortRuleId
+	}
+	if imur.Bucket != nil {
+		redisImur.Bucket = *imur.Bucket
+	}
+	if imur.BucketKeyEnabled != nil {
+		redisImur.BucketKeyEnabled = *imur.BucketKeyEnabled
+	}
+	if imur.Key != nil {
+		redisImur.Key = *imur.Key
+	}
+	if imur.RequestCharged != nil {
+		redisImur.RequestCharged = *imur.RequestCharged
+	}
+	if imur.SSECustomerAlgorithm != nil {
+		redisImur.SSECustomerAlgorithm = *imur.SSECustomerAlgorithm
+	}
+	if imur.SSECustomerKeyMD5 != nil {
+		redisImur.SSECustomerKeyMD5 = *imur.SSECustomerKeyMD5
+	}
+	if imur.SSEKMSEncryptionContext != nil {
+		redisImur.SSEKMSEncryptionContext = *imur.SSEKMSEncryptionContext
+	}
+	if imur.SSEKMSKeyId != nil {
+		redisImur.SSEKMSKeyId = *imur.SSEKMSKeyId
+	}
+	if imur.ServerSideEncryption != nil {
+		redisImur.ServerSideEncryption = *imur.ServerSideEncryption
+	}
+	if imur.UploadId != nil {
+		redisImur.UploadId = *imur.UploadId
+	}
+	return redisImur
+}
 func getBucketInstance(prefer, bucketType, dfsID string, chunkNumber int) (*s3.S3, error) {
 	t, h := chunkBS[dfsID]
 	b, has := bs[dfsID]
