@@ -503,9 +503,10 @@ func checkAllPartsUploaded(totals int, dfsID string) bool {
 }
 
 func checkAllPartsUploadedCS(totals int, dfsID string) bool {
-	cps := sessions.SESS.GetCompletePart(dfsID)
-
-	return len(cps) == totals
+	tallParts := sessions.SESS.GetCompletePart(dfsID)
+	allParts := make([]*s3.CompletedPart, 0)
+	json.Unmarshal(tallParts, &allParts)
+	return len(allParts) == totals
 }
 
 func checkPartNumberUploaded(chunkNumber int, dfsID string) bool {
