@@ -368,7 +368,7 @@ func getIMURSCS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMulti
 		return getIMURSCS(dfsID, chunkNumber, b)
 	}
 
-	if b == nil {
+	if imur.UploadID != "" {
 		return imur, nil
 	}
 	sessions.SESS.SetChunkIMURS(dfsID, chunkNumber)
@@ -376,6 +376,7 @@ func getIMURSCS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMulti
 	if err != nil {
 		return oss.InitiateMultipartUploadResult{}, err
 	}
+	log.Log.Debug().Interface("imurid", imur).Interface("dfsID", dfsID).Msg("getIMURSCS")
 	sessions.SESS.SetImurs(dfsID, imur)
 	return imur, nil
 }
