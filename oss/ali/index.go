@@ -124,6 +124,42 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 	return chunk, 200, "OK", nil
 }
 
+func ChunkUploadPostStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
+	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
+	b, err := getBucketInstanceCS(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	imur, err := getIMURSCS(dfsID, chunk.ChunkNumber, b)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	options := []oss.Option{
+		oss.ContentDisposition("filename=" + chunk.Filename),
+	}
+	f, err := fileChunk.Open()
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	defer f.Close()
+	chunkPart, err := b.UploadPart(imur, f, chunk.CurrentChunkSize, chunk.ChunkNumber, options...)
+	if err != nil {
+		if strings.Index(err.Error(), "dial tcp") > -1 {
+			return ChunkUploadPostStreamCS(userID, prefer, cloud, chunk, fileChunk)
+		}
+		return chunk, 400, "NotExist", err
+	}
+	f.Close()
+	err = setCompletePartCS(chunkPart, dfsID, chunk.ChunkNumber)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	if checkAllPartsUploadedCS(chunk.TotalChunks, dfsID) {
+		return completeChunksUploadCS(userID, prefer, dfsID, chunk)
+	}
+	return chunk, 200, "OK", nil
+}
+
 func setCompletePart(part oss.UploadPart, dfsID string, chunkNumber int) error {
 	cp, has := chunkParts[dfsID]
 	if cp > 0 && has {
@@ -153,6 +189,40 @@ func setCompletePart(part oss.UploadPart, dfsID string, chunkNumber int) error {
 	}
 	completedParts[dfsID] = allParts
 	delete(chunkParts, dfsID)
+	return nil
+}
+
+func setCompletePartCS(part oss.UploadPart, dfsID string, chunkNumber int) error {
+	cp := sessions.SESS.GetChunkParts(dfsID)
+	if cp > 0 {
+		time.Sleep(1 * time.Second)
+		return setCompletePartCS(part, dfsID, chunkNumber)
+	}
+	sessions.SESS.SetChunkParts(dfsID, chunkNumber)
+	tallParts := sessions.SESS.GetCompletePart(dfsID)
+	allParts := make([]oss.UploadPart, 0)
+	json.Unmarshal(tallParts, &allParts)
+	if len(allParts) < 1 {
+		allParts = append(allParts, part)
+	} else {
+		e := false
+		for k, p := range allParts {
+			if p.PartNumber == part.PartNumber {
+				allParts[k] = part
+				e = true
+			}
+		}
+		if !e {
+			allParts = append(allParts, part)
+		}
+	}
+	if len(allParts) > 1 {
+		sort.Slice(allParts, func(i, j int) bool {
+			return allParts[i].PartNumber-allParts[j].PartNumber < 0
+		})
+	}
+	sessions.SESS.SetCompletePart(dfsID, allParts)
+	sessions.SESS.DelChunkParts(dfsID)
 	return nil
 }
 

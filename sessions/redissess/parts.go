@@ -27,6 +27,11 @@ func (d SESSRedisDriver) GetCompletePart(dfsID string) (value []byte) {
 	return value
 }
 
+func (d SESSRedisDriver) DelCompletePart(dfsID string) {
+	completedPartsKey := getCompletedPartsKey(dfsID)
+	d.RD.Del(completedPartsKey)
+}
+
 func (d SESSRedisDriver) SetChunkParts(dfsID string, chunkNumber int) {
 	key := getChunkPartsKey(dfsID)
 	//一小时过期
@@ -49,6 +54,11 @@ func (d SESSRedisDriver) GetChunkParts(dfsID string) (chunkNumber int) {
 	return
 }
 
+func (d SESSRedisDriver) DelChunkParts(dfsID string) {
+	chunkPartsKey := getChunkPartsKey(dfsID)
+	d.RD.Del(chunkPartsKey)
+}
+
 func (d SESSRedisDriver) SetChunkBS(dfsID string, chunkNumber int) {
 	key := getChunkBSKey(dfsID)
 	//一小时过期
@@ -69,6 +79,10 @@ func (d SESSRedisDriver) GetChunkBS(dfsID string) (chunkNumber int) {
 	}
 	return
 }
+func (d SESSRedisDriver) DelChunkBS(dfsID string) {
+	chunkBSsKey := getChunkBSKey(dfsID)
+	d.RD.Del(chunkBSsKey)
+}
 
 func (d SESSRedisDriver) SetImurs(dfsID string, imurs interface{}) {
 	key := getImursKey(dfsID)
@@ -86,6 +100,10 @@ func (d SESSRedisDriver) GetImurs(dfsID string) (imurs []byte) {
 		return
 	}
 	return imurs
+}
+func (d SESSRedisDriver) DelImurs(dfsID string) {
+	imursKey := getImursKey(dfsID)
+	d.RD.Del(imursKey)
 }
 
 func (d SESSRedisDriver) SetChunkIMURS(dfsID string, chunkNumber int) {
@@ -108,6 +126,10 @@ func (d SESSRedisDriver) GetChunkIMURS(dfsID string) (chunkNumber int) {
 		return
 	}
 	return
+}
+func (d SESSRedisDriver) DelChunkIMURS(dfsID string) {
+	chunkIMURSKey := getChunkIMURSKey(dfsID)
+	d.RD.Del(chunkIMURSKey)
 }
 
 func (d SESSRedisDriver) DelAllParts(dfsID string) {

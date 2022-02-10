@@ -13,7 +13,7 @@ import (
 var SESS SESSInterface
 
 // InitSESS init session connection and instance
-func InitSESS(logger *zerolog.Logger) {
+func InitSESS(logger *zerolog.Logger) redissess.SESSRedisDriver {
 	log.Log = logger
 	dbType := viper.GetString("session.type")
 	if dbType == "" {
@@ -21,8 +21,11 @@ func InitSESS(logger *zerolog.Logger) {
 	}
 	switch dbType {
 	case "redis":
-		SESS = redissess.InitRedis()
+		dricer := redissess.InitRedis()
+		SESS = dricer
+		return dricer
 	}
+	return redissess.SESSRedisDriver{RD: nil}
 }
 
 // SESSInterface interface for cross sessions
@@ -36,17 +39,23 @@ type SESSInterface interface {
 	RedisLockRefresh(redisKey string, expiration time.Duration) (succ bool)
 	SetCompletePart(dfsID string, allParts interface{})
 	GetCompletePart(dfsID string) (allParts []byte)
+	DelCompletePart(dfsID string)
+
 	SetChunkParts(dfsID string, chunkNumber int)
 	GetChunkParts(dfsID string) (chunkNumber int)
+	DelChunkParts(dfsID string)
 
 	SetChunkBS(dfsID string, chunkNumber int)
 	GetChunkBS(dfsID string) (chunkNumber int)
+	DelChunkBS(dfsID string)
 
 	SetImurs(dfsID string, imurs interface{})
 	GetImurs(dfsID string) (imurs []byte)
+	DelImurs(dfsID string)
 
 	SetChunkIMURS(dfsID string, chunkNumber int)
 	GetChunkIMURS(dfsID string) (chunkNumber int)
+	DelChunkIMURS(dfsID string)
 
 	DelAllParts(dfsID string)
 }

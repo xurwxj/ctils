@@ -142,6 +142,89 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 	return chunk, 200, "OK", nil
 }
 
+func ChunkUploadPostStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
+	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
+	b, err := getBucketInstanceCS(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	imur, err := getIMURSCS(prefer, chunk.Bucket, dfsID, chunk.Filename, chunk.ChunkNumber, b)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	f, err := fileChunk.Open()
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	defer f.Close()
+	buf := bytes.NewBuffer(nil)
+	if _, err := io.Copy(buf, f); err != nil {
+		return chunk, 400, "NotExist", err
+	}
+
+	fileBytes := buf.Bytes()
+
+	partInput := &s3.UploadPartInput{
+		Body:          bytes.NewReader(fileBytes),
+		Bucket:        imur.Bucket,
+		Key:           imur.Key,
+		PartNumber:    aws.Int64(int64(chunk.ChunkNumber)),
+		UploadId:      imur.UploadId,
+		ContentLength: aws.Int64(int64(len(fileBytes))),
+	}
+
+	uploadResult, err := b.UploadPart(partInput)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	chunkPart := &s3.CompletedPart{
+		ETag:       uploadResult.ETag,
+		PartNumber: aws.Int64(int64(chunk.ChunkNumber)),
+	}
+	f.Close()
+	err = setCompletePartCS(chunkPart, dfsID, chunk.ChunkNumber)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	if checkAllPartsUploadedCS(chunk.TotalChunks, dfsID) {
+		return completeChunksUploadCS(userID, prefer, dfsID, chunk)
+	}
+	return chunk, 200, "OK", nil
+}
+func setCompletePartCS(part *s3.CompletedPart, dfsID string, chunkNumber int) error {
+	cp := sessions.SESS.GetChunkParts(dfsID)
+	if cp > 0 {
+		time.Sleep(1 * time.Second)
+		return setCompletePartCS(part, dfsID, chunkNumber)
+	}
+	sessions.SESS.SetChunkParts(dfsID, chunkNumber)
+	tallParts := sessions.SESS.GetCompletePart(dfsID)
+	allParts := make([]*s3.CompletedPart, 0)
+	json.Unmarshal(tallParts, &allParts)
+	if len(allParts) < 1 {
+		allParts = append(allParts, part)
+	} else {
+		e := false
+		for k, p := range allParts {
+			if p.PartNumber == part.PartNumber {
+				allParts[k] = part
+				e = true
+			}
+		}
+		if !e {
+			allParts = append(allParts, part)
+		}
+	}
+	if len(allParts) > 1 {
+		sort.Slice(allParts, func(i, j int) bool {
+			return *allParts[i].PartNumber-*allParts[j].PartNumber < 0
+		})
+	}
+	sessions.SESS.SetCompletePart(dfsID, allParts)
+	sessions.SESS.DelChunkParts(dfsID)
+	return nil
+}
+
 func setCompletePart(part *s3.CompletedPart, dfsID string, chunkNumber int) error {
 	cp, has := chunkParts[dfsID]
 	if cp > 0 && has {

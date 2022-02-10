@@ -82,6 +82,23 @@ func ChunkUploadPostStream(userID, prefer string, chunk utils.ChunksObj, fileChu
 	return chunk, 500, "unknownErr", fmt.Errorf("unknownErr")
 }
 
+func ChunkUploadPostStreamCS(userID, prefer string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
+	if prefer == "" {
+		prefer = "default"
+	}
+	if chunk.Bucket == "" {
+		chunk.Bucket = "data"
+	}
+	cloud := viper.GetString("oss.cloud")
+	switch cloud {
+	case "aliyun":
+		return ali.ChunkUploadPostStreamCS(userID, prefer, cloud, chunk, fileChunk)
+	case "aws":
+		return aws.ChunkUploadPostStreamCS(userID, prefer, cloud, chunk, fileChunk)
+	}
+	return chunk, 500, "unknownErr", fmt.Errorf("unknownErr")
+}
+
 // PutByteFile auto upload file Byte by cloud
 func PutByteFile(prefer, dfsID string, chunk utils.ChunksObj, o map[string]string, f []byte) (utils.ChunksObj, error) {
 	if prefer == "" {
