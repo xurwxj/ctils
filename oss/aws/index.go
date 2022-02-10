@@ -2,10 +2,12 @@ package aws
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -13,8 +15,16 @@ import (
 	s3sses "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/xurwxj/ctils/oss/utils"
+	"github.com/xurwxj/ctils/sessions"
 	"github.com/xurwxj/viper"
 )
+
+type BucketInfo struct {
+	OsBucket map[string]*s3.S3
+	Lock     sync.Locker
+}
+
+var bsCS BucketInfo
 
 var bs map[string]*s3.S3
 var chunkBS map[string]int
@@ -25,6 +35,11 @@ var completedParts map[string][]*s3.CompletedPart
 
 func init() {
 	fmt.Println("aws s3 upload init() starting...")
+	if bsCS.OsBucket == nil || len(bsCS.OsBucket) < 1 {
+		bsCS = BucketInfo{
+			OsBucket: make(map[string]*s3.S3),
+		}
+	}
 	if bs == nil || len(bs) < 1 {
 		bs = make(map[string]*s3.S3)
 	}
@@ -57,6 +72,17 @@ func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (
 	}
 	if checkAllPartsUploaded(chunk.TotalChunks, dfsID) {
 		return completeChunksUpload(userID, prefer, dfsID, chunk)
+	}
+	return chunk, 200, "OK", nil
+}
+
+func ChunkUploadGetStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
+	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
+	if !checkPartNumberUploadedCS(chunk.ChunkNumber, dfsID) {
+		return chunk, 400, "NotExist", nil
+	}
+	if checkAllPartsUploadedCS(chunk.TotalChunks, dfsID) {
+		return completeChunksUploadCS(userID, prefer, dfsID, chunk)
 	}
 	return chunk, 200, "OK", nil
 }
@@ -114,6 +140,89 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 		return completeChunksUpload(userID, prefer, dfsID, chunk)
 	}
 	return chunk, 200, "OK", nil
+}
+
+func ChunkUploadPostStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
+	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
+	b, err := getBucketInstanceCS(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	imur, err := getIMURSCS(prefer, chunk.Bucket, dfsID, chunk.Filename, chunk.ChunkNumber, b)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	f, err := fileChunk.Open()
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	defer f.Close()
+	buf := bytes.NewBuffer(nil)
+	if _, err := io.Copy(buf, f); err != nil {
+		return chunk, 400, "NotExist", err
+	}
+
+	fileBytes := buf.Bytes()
+
+	partInput := &s3.UploadPartInput{
+		Body:          bytes.NewReader(fileBytes),
+		Bucket:        imur.Bucket,
+		Key:           imur.Key,
+		PartNumber:    aws.Int64(int64(chunk.ChunkNumber)),
+		UploadId:      imur.UploadId,
+		ContentLength: aws.Int64(int64(len(fileBytes))),
+	}
+
+	uploadResult, err := b.UploadPart(partInput)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	chunkPart := &s3.CompletedPart{
+		ETag:       uploadResult.ETag,
+		PartNumber: aws.Int64(int64(chunk.ChunkNumber)),
+	}
+	f.Close()
+	err = setCompletePartCS(chunkPart, dfsID, chunk.ChunkNumber)
+	if err != nil {
+		return chunk, 400, "NotExist", err
+	}
+	if checkAllPartsUploadedCS(chunk.TotalChunks, dfsID) {
+		return completeChunksUploadCS(userID, prefer, dfsID, chunk)
+	}
+	return chunk, 200, "OK", nil
+}
+func setCompletePartCS(part *s3.CompletedPart, dfsID string, chunkNumber int) error {
+	cp := sessions.SESS.GetChunkParts(dfsID)
+	if cp > 0 {
+		time.Sleep(1 * time.Second)
+		return setCompletePartCS(part, dfsID, chunkNumber)
+	}
+	sessions.SESS.SetChunkParts(dfsID, chunkNumber)
+	tallParts := sessions.SESS.GetCompletePart(dfsID)
+	allParts := make([]*s3.CompletedPart, 0)
+	json.Unmarshal(tallParts, &allParts)
+	if len(allParts) < 1 {
+		allParts = append(allParts, part)
+	} else {
+		e := false
+		for k, p := range allParts {
+			if p.PartNumber == part.PartNumber {
+				allParts[k] = part
+				e = true
+			}
+		}
+		if !e {
+			allParts = append(allParts, part)
+		}
+	}
+	if len(allParts) > 1 {
+		sort.Slice(allParts, func(i, j int) bool {
+			return *allParts[i].PartNumber-*allParts[j].PartNumber < 0
+		})
+	}
+	sessions.SESS.SetCompletePart(dfsID, allParts)
+	sessions.SESS.DelChunkParts(dfsID)
+	return nil
 }
 
 func setCompletePart(part *s3.CompletedPart, dfsID string, chunkNumber int) error {
@@ -198,6 +307,59 @@ func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (
 	return chunk, 200, "DONE", err
 }
 
+func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
+	tallParts := sessions.SESS.GetCompletePart(dfsID)
+	allParts := make([]*s3.CompletedPart, 0)
+	json.Unmarshal(tallParts, &allParts)
+	if len(allParts) != chunk.TotalChunks {
+		clearInitCS(dfsID)
+		return chunk, 500, "completePartsErr", nil
+	}
+	b, err := getBucketInstanceCS(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
+	if err != nil {
+		clearInitCS(dfsID)
+		return chunk, 500, "connectionErr", err
+	}
+	imur, err := getIMURSCS(prefer, chunk.Bucket, dfsID, chunk.Filename, chunk.ChunkNumber, b)
+	if err != nil {
+		clearInitCS(dfsID)
+		return chunk, 500, "imurErr", err
+	}
+
+	completeInput := &s3.CompleteMultipartUploadInput{
+		Bucket:   imur.Bucket,
+		Key:      imur.Key,
+		UploadId: imur.UploadId,
+		MultipartUpload: &s3.CompletedMultipartUpload{
+			Parts: allParts,
+		},
+	}
+	_, err = b.CompleteMultipartUpload(completeInput)
+	if err != nil {
+		clearInitCS(dfsID)
+		return chunk, 500, "completeErr", err
+	}
+	objHeader, err := b.HeadObject(&s3.HeadObjectInput{
+		Bucket: imur.Bucket,
+		Key:    imur.Key,
+	})
+	if err == nil {
+		chunk.ContentType = *objHeader.ContentType
+	}
+	chunk.Bucket = *imur.Bucket
+	chunk.Endpoint = utils.GetEndpointByPrefer(prefer)
+	chunk.DfsID = dfsID
+	if chunk.DownValidTo > 0 {
+		var urlRS map[string]string
+		urlRS, err = GetTempDownURLFileName(*imur.Bucket, dfsID, chunk.DownValidTo)
+		if url, has := urlRS["url"]; has && url != "" {
+			chunk.DownURL = url
+		}
+	}
+	go clearInit(dfsID)
+	return chunk, 200, "DONE", err
+}
+
 func clearInit(dfsID string) {
 	delete(bs, dfsID)
 	delete(chunkBS, dfsID)
@@ -205,6 +367,12 @@ func clearInit(dfsID string) {
 	delete(chunkIMURS, dfsID)
 	delete(chunkParts, dfsID)
 	delete(completedParts, dfsID)
+}
+func clearInitCS(dfsID string) {
+	sessions.SESS.DelAllParts(dfsID)
+	bsCS.Lock.Lock()
+	delete(bsCS.OsBucket, dfsID)
+	defer bsCS.Lock.Unlock()
 }
 
 func getIMURS(prefer, bucketType, dfsID, fileName string, chunkNumber int, b *s3.S3) (*s3.CreateMultipartUploadOutput, error) {
@@ -237,6 +405,39 @@ func getIMURS(prefer, bucketType, dfsID, fileName string, chunkNumber int, b *s3
 	return imur, nil
 }
 
+func getIMURSCS(prefer, bucketType, dfsID, fileName string, chunkNumber int, b *s3.S3) (*s3.CreateMultipartUploadOutput, error) {
+	t := sessions.SESS.GetChunkIMURS(dfsID)
+	timur := sessions.SESS.GetImurs(dfsID)
+	imur := &s3.CreateMultipartUploadOutput{}
+	json.Unmarshal(timur, imur)
+	if t > 0 {
+		time.Sleep(1 * time.Second)
+		return getIMURSCS(prefer, bucketType, dfsID, fileName, chunkNumber, b)
+	}
+	if b != nil {
+		return imur, nil
+	}
+	sessions.SESS.SetChunkIMURS(dfsID, chunkNumber)
+
+	prefer, bucket := utils.GetByBucketPrefer(prefer, bucketType)
+	input := s3.CreateMultipartUploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(dfsID),
+		// ContentType:        aws.String(fileType),
+		// ACL:                aws.String("public-read"),
+		ContentDisposition: aws.String("filename=" + fileName),
+	}
+	if bucketType == "pub" {
+		input.ACL = aws.String("public-read")
+	}
+	imur, err := b.CreateMultipartUpload(&input)
+	if err != nil {
+		return imur, err
+	}
+	sessions.SESS.SetImurs(dfsID, imur)
+	return imur, nil
+}
+
 func getBucketInstance(prefer, bucketType, dfsID string, chunkNumber int) (*s3.S3, error) {
 	t, h := chunkBS[dfsID]
 	b, has := bs[dfsID]
@@ -264,6 +465,35 @@ func getBucketInstance(prefer, bucketType, dfsID string, chunkNumber int) (*s3.S
 	return b, nil
 }
 
+func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*s3.S3, error) {
+	t := sessions.SESS.GetChunkBS(dfsID)
+	bsCS.Lock.Lock()
+	defer bsCS.Lock.Unlock()
+	b, has := bsCS.OsBucket[dfsID]
+	if t > 0 && (b == nil || !has) {
+		time.Sleep(1 * time.Second)
+		return getBucketInstanceCS(prefer, bucketType, dfsID, chunkNumber)
+	}
+	if has && b != nil {
+		return b, nil
+	}
+	chunkBS[dfsID] = chunkNumber
+	endpoint := viper.GetString(fmt.Sprintf("oss.%s.endpoint", prefer))
+	accessKey := viper.GetString(fmt.Sprintf("oss.%s.accessKey", prefer))
+	accessSecret := viper.GetString(fmt.Sprintf("oss.%s.accessSecret", prefer))
+	if endpoint == "" || accessKey == "" || accessSecret == "" {
+		return b, fmt.Errorf("configErr")
+	}
+	creds := credentials.NewStaticCredentials(accessKey, accessSecret, "")
+	_, err := creds.Get()
+	if err != nil {
+		return nil, err
+	}
+	b = s3.New(s3sses.New(), aws.NewConfig().WithRegion(endpoint).WithCredentials(creds))
+	bsCS.OsBucket[dfsID] = b
+	return b, nil
+}
+
 func checkAllPartsUploaded(totals int, dfsID string) bool {
 	cps, has := completedParts[dfsID]
 	if has && len(cps) == totals {
@@ -272,11 +502,32 @@ func checkAllPartsUploaded(totals int, dfsID string) bool {
 	return false
 }
 
+func checkAllPartsUploadedCS(totals int, dfsID string) bool {
+	tallParts := sessions.SESS.GetCompletePart(dfsID)
+	allParts := make([]*s3.CompletedPart, 0)
+	json.Unmarshal(tallParts, &allParts)
+	return len(allParts) == totals
+}
+
 func checkPartNumberUploaded(chunkNumber int, dfsID string) bool {
 	cps, has := completedParts[dfsID]
 	if has && len(cps) > 0 {
 		for _, cp := range cps {
 			if *cp.PartNumber == int64(chunkNumber) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func checkPartNumberUploadedCS(chunkNumber int, dfsID string) bool {
+	cps := sessions.SESS.GetCompletePart(dfsID)
+	allParts := make([]*s3.CompletedPart, 0)
+	json.Unmarshal(cps, &allParts)
+	if len(allParts) > 0 {
+		for _, part := range allParts {
+			if *part.PartNumber == int64(chunkNumber) {
 				return true
 			}
 		}
