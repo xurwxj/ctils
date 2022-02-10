@@ -298,6 +298,7 @@ func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj)
 	options := []oss.Option{
 		oss.ContentDisposition("filename=" + chunk.Filename),
 	}
+	log.Log.Debug().Interface("b", b).Interface("dfsID", dfsID).Interface("imur", imur).Interface("allParts", allParts).Interface("options", options).Msg("completeChunksUploadCS:CompleteMultipartUpload")
 	_, err = b.CompleteMultipartUpload(imur, allParts, options...)
 	if err != nil {
 		clearInitCS(dfsID)
