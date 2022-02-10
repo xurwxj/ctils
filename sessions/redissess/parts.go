@@ -152,7 +152,7 @@ func (d SESSRedisDriver) DelAllParts(dfsID string) {
 		return
 	}
 	for _, cmder := range cmders {
-		cmd := cmder.(*redis.StringStringMapCmd)
+		cmd := cmder.(*redis.IntCmd)
 		_, err := cmd.Result()
 		if err != nil {
 			log.Log.Err(err).Msg("DelAllParts:Result")

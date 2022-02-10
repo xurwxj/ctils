@@ -22,7 +22,7 @@ import (
 
 type BucketInfo struct {
 	OsBucket map[string]*s3.S3
-	Lock     sync.Locker
+	Lock     sync.Mutex
 }
 
 var bsCS BucketInfo
