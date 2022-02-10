@@ -467,7 +467,9 @@ func getBucketInstance(prefer, bucketType, dfsID string, chunkNumber int) (*s3.S
 
 func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*s3.S3, error) {
 	t := sessions.SESS.GetChunkBS(dfsID)
-	b, has := bs[dfsID]
+	bsCS.Lock.Lock()
+	defer bsCS.Lock.Unlock()
+	b, has := bsCS.OsBucket[dfsID]
 	if t > 0 && (b == nil || !has) {
 		time.Sleep(1 * time.Second)
 		return getBucketInstanceCS(prefer, bucketType, dfsID, chunkNumber)
@@ -488,7 +490,7 @@ func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*s3
 		return nil, err
 	}
 	b = s3.New(s3sses.New(), aws.NewConfig().WithRegion(endpoint).WithCredentials(creds))
-	bs[dfsID] = b
+	bsCS.OsBucket[dfsID] = b
 	return b, nil
 }
 

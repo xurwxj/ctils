@@ -391,10 +391,12 @@ func getBucketInstance(prefer, bucketType, dfsID string, chunkNumber int) (*oss.
 
 func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*oss.Bucket, error) {
 	t := sessions.SESS.GetChunkBS(dfsID)
-	b, has := bs[dfsID]
+	bsCS.Lock.Lock()
+	defer bsCS.Lock.Unlock()
+	b, has := bsCS.OsBucket[dfsID]
 	if t > 0 && (b == nil || !has) {
 		time.Sleep(1 * time.Second)
-		return getBucketInstance(prefer, bucketType, dfsID, chunkNumber)
+		return getBucketInstanceCS(prefer, bucketType, dfsID, chunkNumber)
 	}
 	if has && b != nil {
 		return b, nil
@@ -405,7 +407,7 @@ func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*os
 	if err != nil {
 		return nil, err
 	}
-	bs[dfsID] = b
+	bsCS.OsBucket[dfsID] = b
 	return b, nil
 }
 
