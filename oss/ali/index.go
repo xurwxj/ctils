@@ -10,13 +10,14 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/xurwxj/ctils/log"
 	"github.com/xurwxj/ctils/oss/utils"
 	"github.com/xurwxj/ctils/sessions"
 )
 
 type BucketInfo struct {
 	OsBucket map[string]*oss.Bucket
-	Lock     sync.Locker
+	Lock     sync.Mutex
 }
 
 var bsCS BucketInfo
@@ -127,10 +128,13 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 func ChunkUploadPostStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
 	b, err := getBucketInstanceCS(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
+	log.Log.Debug().Interface("b", b).Msg("ChunkUploadPostStreamCS")
 	if err != nil {
 		return chunk, 400, "NotExist", err
 	}
 	imur, err := getIMURSCS(dfsID, chunk.ChunkNumber, b)
+	log.Log.Debug().Interface("imur", imur).Msg("ChunkUploadPostStreamCS")
+
 	if err != nil {
 		return chunk, 400, "NotExist", err
 	}
@@ -201,7 +205,9 @@ func setCompletePartCS(part oss.UploadPart, dfsID string, chunkNumber int) error
 	sessions.SESS.SetChunkParts(dfsID, chunkNumber)
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
-	json.Unmarshal(tallParts, &allParts)
+	if err := json.Unmarshal(tallParts, &allParts); err != nil {
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("setCompletePartCS:Unmarshal")
+	}
 	if len(allParts) < 1 {
 		allParts = append(allParts, part)
 	} else {
@@ -271,7 +277,9 @@ func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (
 func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
-	json.Unmarshal(tallParts, &allParts)
+	if err := json.Unmarshal(tallParts, &allParts); err != nil {
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("completeChunksUploadCS:Unmarshal")
+	}
 
 	if len(allParts) != chunk.TotalChunks {
 		clearInitCS(dfsID)
@@ -290,6 +298,7 @@ func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj)
 	options := []oss.Option{
 		oss.ContentDisposition("filename=" + chunk.Filename),
 	}
+	log.Log.Debug().Interface("b", b).Interface("dfsID", dfsID).Interface("imur", imur).Interface("allParts", allParts).Interface("options", options).Msg("completeChunksUploadCS:CompleteMultipartUpload")
 	_, err = b.CompleteMultipartUpload(imur, allParts, options...)
 	if err != nil {
 		clearInitCS(dfsID)
@@ -351,13 +360,15 @@ func getIMURSCS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMulti
 	t := sessions.SESS.GetChunkIMURS(dfsID)
 	timur := sessions.SESS.GetImurs(dfsID)
 	imur := oss.InitiateMultipartUploadResult{}
-	json.Unmarshal(timur, &imur)
+	if err := json.Unmarshal(timur, &imur); err != nil {
+		log.Log.Err(err).Str("timur", string(timur)).Str("key", dfsID).Msg("getIMURSCS:Unmarshal")
+	}
 	if t > 0 && (imur.UploadID == "") {
 		time.Sleep(1 * time.Second)
 		return getIMURSCS(dfsID, chunkNumber, b)
 	}
 
-	if b == nil {
+	if imur.UploadID != "" {
 		return imur, nil
 	}
 	sessions.SESS.SetChunkIMURS(dfsID, chunkNumber)
@@ -365,6 +376,7 @@ func getIMURSCS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMulti
 	if err != nil {
 		return oss.InitiateMultipartUploadResult{}, err
 	}
+	log.Log.Debug().Interface("imurid", imur).Interface("dfsID", dfsID).Msg("getIMURSCS")
 	sessions.SESS.SetImurs(dfsID, imur)
 	return imur, nil
 }
@@ -393,6 +405,7 @@ func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*os
 	t := sessions.SESS.GetChunkBS(dfsID)
 	bsCS.Lock.Lock()
 	defer bsCS.Lock.Unlock()
+	log.Log.Debug().Interface("OsBucket", bsCS.OsBucket).Msg("getBucketInstanceCS:OsBucket")
 	b, has := bsCS.OsBucket[dfsID]
 	if t > 0 && (b == nil || !has) {
 		time.Sleep(1 * time.Second)
@@ -401,6 +414,7 @@ func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*os
 	if has && b != nil {
 		return b, nil
 	}
+	log.Log.Debug().Interface("b", b).Str("b", dfsID).Msg("getBucketInstanceCS:OsBucket")
 	sessions.SESS.SetChunkBS(dfsID, chunkNumber)
 	prefer, bucket := utils.GetByBucketPrefer(prefer, bucketType)
 	b, err := InitBucket(prefer, bucket)
@@ -420,9 +434,12 @@ func checkAllPartsUploaded(totals int, dfsID string) bool {
 }
 
 func checkAllPartsUploadedCS(totals int, dfsID string) bool {
+	log.Log.Debug().Interface("dfsID", dfsID).Msg("checkAllPartsUploadedCS")
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
-	json.Unmarshal(tallParts, &allParts)
+	if err := json.Unmarshal(tallParts, &allParts); err != nil {
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("checkAllPartsUploadedCS:Unmarshal")
+	}
 	return len(allParts) == totals
 }
 
@@ -441,7 +458,9 @@ func checkPartNumberUploaded(chunkNumber int, dfsID string) bool {
 func checkPartNumberUploadedCS(chunkNumber int, dfsID string) bool {
 	cps := sessions.SESS.GetCompletePart(dfsID)
 	allPorts := make([]oss.UploadPart, 0)
-	json.Unmarshal(cps, &allPorts)
+	if err := json.Unmarshal(cps, &allPorts); err != nil {
+		log.Log.Err(err).Str("cps", string(cps)).Str("key", dfsID).Msg("checkPartNumberUploadedCS:Unmarshal")
+	}
 	if len(allPorts) > 0 {
 		for _, port := range allPorts {
 			if port.PartNumber == chunkNumber {
