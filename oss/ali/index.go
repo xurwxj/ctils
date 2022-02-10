@@ -17,7 +17,7 @@ import (
 
 type BucketInfo struct {
 	OsBucket map[string]*oss.Bucket
-	Lock     sync.Locker
+	Lock     sync.Mutex
 }
 
 var bsCS BucketInfo
