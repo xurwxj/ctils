@@ -1,6 +1,8 @@
 package redissess
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -48,7 +50,7 @@ func (d SESSRedisDriver) GetChunkParts(dfsID string) (chunkNumber int) {
 		return
 	}
 	if err = json.Unmarshal(value, &chunkNumber); err != nil {
-		log.Log.Err(err).Msg("GetChunkParts:Unmarshal")
+		log.Log.Err(err).Str("value", string(value)).Msg("GetChunkParts:Unmarshal")
 		return
 	}
 	return
@@ -74,7 +76,7 @@ func (d SESSRedisDriver) GetChunkBS(dfsID string) (chunkNumber int) {
 		return
 	}
 	if err = json.Unmarshal(value, &chunkNumber); err != nil {
-		log.Log.Err(err).Msg("GetChunkParts:Unmarshal")
+		log.Log.Err(err).Str("value", string(value)).Msg("GetChunkParts:Unmarshal")
 		return
 	}
 	return
@@ -122,7 +124,7 @@ func (d SESSRedisDriver) GetChunkIMURS(dfsID string) (chunkNumber int) {
 		return
 	}
 	if err = json.Unmarshal(value, &chunkNumber); err != nil {
-		log.Log.Err(err).Msg("GetChunkParts:Unmarshal")
+		log.Log.Err(err).Str("value", string(value)).Msg("GetChunkParts:Unmarshal")
 		return
 	}
 	return
@@ -159,21 +161,32 @@ func (d SESSRedisDriver) DelAllParts(dfsID string) {
 }
 
 func getCompletedPartsKey(dfsID string) (key string) {
-	return fmt.Sprintf("completed_parts_%s", dfsID)
+	dfsID = Md5String(dfsID)
+	return fmt.Sprintf("com_parts_%s", dfsID)
 }
 
 func getChunkPartsKey(dfsID string) (key string) {
-	return fmt.Sprintf("chunk_parts_%s", dfsID)
+	dfsID = Md5String(dfsID)
+	return fmt.Sprintf("cuk_parts_%s", dfsID)
 }
 
 func getChunkBSKey(dfsID string) (key string) {
-	return fmt.Sprintf("chunk_bs_%s", dfsID)
+	dfsID = Md5String(dfsID)
+	return fmt.Sprintf("cuk_bs_%s", dfsID)
 }
 
 func getImursKey(dfsID string) (key string) {
-	return fmt.Sprintf("imurs_%s", dfsID)
+	dfsID = Md5String(dfsID)
+	return fmt.Sprintf("im_%s", dfsID)
 }
 
 func getChunkIMURSKey(dfsID string) (key string) {
-	return fmt.Sprintf("chunk_imurs_%s", dfsID)
+	dfsID = Md5String(dfsID)
+	return fmt.Sprintf("cum_im_%s", dfsID)
+}
+
+func Md5String(dfsID string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(dfsID))
+	return hex.EncodeToString(hasher.Sum(nil))
 }

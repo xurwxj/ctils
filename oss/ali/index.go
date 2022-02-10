@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/xurwxj/ctils/log"
 	"github.com/xurwxj/ctils/oss/utils"
 	"github.com/xurwxj/ctils/sessions"
 )
@@ -201,7 +202,9 @@ func setCompletePartCS(part oss.UploadPart, dfsID string, chunkNumber int) error
 	sessions.SESS.SetChunkParts(dfsID, chunkNumber)
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
-	json.Unmarshal(tallParts, &allParts)
+	if err := json.Unmarshal(tallParts, &allParts); err != nil {
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Msg("setCompletePartCS:Unmarshal")
+	}
 	if len(allParts) < 1 {
 		allParts = append(allParts, part)
 	} else {
@@ -271,7 +274,9 @@ func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (
 func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
-	json.Unmarshal(tallParts, &allParts)
+	if err := json.Unmarshal(tallParts, &allParts); err != nil {
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Msg("completeChunksUploadCS:Unmarshal")
+	}
 
 	if len(allParts) != chunk.TotalChunks {
 		clearInitCS(dfsID)
@@ -351,7 +356,9 @@ func getIMURSCS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMulti
 	t := sessions.SESS.GetChunkIMURS(dfsID)
 	timur := sessions.SESS.GetImurs(dfsID)
 	imur := oss.InitiateMultipartUploadResult{}
-	json.Unmarshal(timur, &imur)
+	if err := json.Unmarshal(timur, &imur); err != nil {
+		log.Log.Err(err).Str("timur", string(timur)).Msg("getIMURSCS:Unmarshal")
+	}
 	if t > 0 && (imur.UploadID == "") {
 		time.Sleep(1 * time.Second)
 		return getIMURSCS(dfsID, chunkNumber, b)
@@ -422,7 +429,9 @@ func checkAllPartsUploaded(totals int, dfsID string) bool {
 func checkAllPartsUploadedCS(totals int, dfsID string) bool {
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
-	json.Unmarshal(tallParts, &allParts)
+	if err := json.Unmarshal(tallParts, &allParts); err != nil {
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Msg("checkAllPartsUploadedCS:Unmarshal")
+	}
 	return len(allParts) == totals
 }
 
@@ -441,7 +450,9 @@ func checkPartNumberUploaded(chunkNumber int, dfsID string) bool {
 func checkPartNumberUploadedCS(chunkNumber int, dfsID string) bool {
 	cps := sessions.SESS.GetCompletePart(dfsID)
 	allPorts := make([]oss.UploadPart, 0)
-	json.Unmarshal(cps, &allPorts)
+	if err := json.Unmarshal(cps, &allPorts); err != nil {
+		log.Log.Err(err).Str("cps", string(cps)).Msg("checkPartNumberUploadedCS:Unmarshal")
+	}
 	if len(allPorts) > 0 {
 		for _, port := range allPorts {
 			if port.PartNumber == chunkNumber {
