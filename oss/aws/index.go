@@ -202,7 +202,7 @@ func setCompletePartCS(part *s3.CompletedPart, dfsID string, chunkNumber int) er
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]*s3.CompletedPart, 0)
 	if err := json.Unmarshal(tallParts, &allParts); err != nil {
-		log.Log.Err(err).Str("tallParts", string(tallParts)).Msg("setCompletePartCS:Unmarshal")
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("setCompletePartCS:Unmarshal")
 	}
 	if len(allParts) < 1 {
 		allParts = append(allParts, part)
@@ -314,7 +314,7 @@ func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj)
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]*s3.CompletedPart, 0)
 	if err := json.Unmarshal(tallParts, &allParts); err != nil {
-		log.Log.Err(err).Str("tallParts", string(tallParts)).Msg("setCompletePartCS:Unmarshal")
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("setCompletePartCS:Unmarshal")
 	}
 	if len(allParts) != chunk.TotalChunks {
 		clearInitCS(dfsID)
@@ -415,7 +415,7 @@ func getIMURSCS(prefer, bucketType, dfsID, fileName string, chunkNumber int, b *
 	timur := sessions.SESS.GetImurs(dfsID)
 	imur := &s3.CreateMultipartUploadOutput{}
 	if err := json.Unmarshal(timur, imur); err != nil {
-		log.Log.Err(err).Str("timur", string(timur)).Msg("getIMURSCS:Unmarshal")
+		log.Log.Err(err).Str("timur", string(timur)).Str("key", dfsID).Msg("getIMURSCS:Unmarshal")
 	}
 	if t > 0 {
 		time.Sleep(1 * time.Second)
@@ -513,7 +513,7 @@ func checkAllPartsUploadedCS(totals int, dfsID string) bool {
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]*s3.CompletedPart, 0)
 	if err := json.Unmarshal(tallParts, &allParts); err != nil {
-		log.Log.Err(err).Str("tallParts", string(tallParts)).Msg("checkAllPartsUploadedCS:Unmarshal")
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("checkAllPartsUploadedCS:Unmarshal")
 	}
 
 	return len(allParts) == totals
@@ -535,7 +535,7 @@ func checkPartNumberUploadedCS(chunkNumber int, dfsID string) bool {
 	cps := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]*s3.CompletedPart, 0)
 	if err := json.Unmarshal(cps, &allParts); err != nil {
-		log.Log.Err(err).Str("cps", string(cps)).Msg("checkPartNumberUploadedCS:Unmarshal")
+		log.Log.Err(err).Str("cps", string(cps)).Str("key", dfsID).Msg("checkPartNumberUploadedCS:Unmarshal")
 	}
 
 	if len(allParts) > 0 {

@@ -128,10 +128,13 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 func ChunkUploadPostStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
 	b, err := getBucketInstanceCS(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
+	log.Log.Debug().Interface("b", b).Msg("ChunkUploadPostStreamCS")
 	if err != nil {
 		return chunk, 400, "NotExist", err
 	}
 	imur, err := getIMURSCS(dfsID, chunk.ChunkNumber, b)
+	log.Log.Debug().Interface("imur", imur).Msg("ChunkUploadPostStreamCS")
+
 	if err != nil {
 		return chunk, 400, "NotExist", err
 	}
@@ -203,7 +206,7 @@ func setCompletePartCS(part oss.UploadPart, dfsID string, chunkNumber int) error
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
 	if err := json.Unmarshal(tallParts, &allParts); err != nil {
-		log.Log.Err(err).Str("tallParts", string(tallParts)).Msg("setCompletePartCS:Unmarshal")
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("setCompletePartCS:Unmarshal")
 	}
 	if len(allParts) < 1 {
 		allParts = append(allParts, part)
@@ -275,7 +278,7 @@ func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj)
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
 	if err := json.Unmarshal(tallParts, &allParts); err != nil {
-		log.Log.Err(err).Str("tallParts", string(tallParts)).Msg("completeChunksUploadCS:Unmarshal")
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("completeChunksUploadCS:Unmarshal")
 	}
 
 	if len(allParts) != chunk.TotalChunks {
@@ -357,7 +360,7 @@ func getIMURSCS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMulti
 	timur := sessions.SESS.GetImurs(dfsID)
 	imur := oss.InitiateMultipartUploadResult{}
 	if err := json.Unmarshal(timur, &imur); err != nil {
-		log.Log.Err(err).Str("timur", string(timur)).Msg("getIMURSCS:Unmarshal")
+		log.Log.Err(err).Str("timur", string(timur)).Str("key", dfsID).Msg("getIMURSCS:Unmarshal")
 	}
 	if t > 0 && (imur.UploadID == "") {
 		time.Sleep(1 * time.Second)
@@ -400,6 +403,7 @@ func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*os
 	t := sessions.SESS.GetChunkBS(dfsID)
 	bsCS.Lock.Lock()
 	defer bsCS.Lock.Unlock()
+	log.Log.Debug().Interface("OsBucket", bsCS.OsBucket).Msg("getBucketInstanceCS:OsBucket")
 	b, has := bsCS.OsBucket[dfsID]
 	if t > 0 && (b == nil || !has) {
 		time.Sleep(1 * time.Second)
@@ -408,6 +412,7 @@ func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*os
 	if has && b != nil {
 		return b, nil
 	}
+	log.Log.Debug().Interface("b", b).Str("b", dfsID).Msg("getBucketInstanceCS:OsBucket")
 	sessions.SESS.SetChunkBS(dfsID, chunkNumber)
 	prefer, bucket := utils.GetByBucketPrefer(prefer, bucketType)
 	b, err := InitBucket(prefer, bucket)
@@ -427,10 +432,11 @@ func checkAllPartsUploaded(totals int, dfsID string) bool {
 }
 
 func checkAllPartsUploadedCS(totals int, dfsID string) bool {
+	log.Log.Debug().Interface("dfsID", dfsID).Msg("checkAllPartsUploadedCS")
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
 	if err := json.Unmarshal(tallParts, &allParts); err != nil {
-		log.Log.Err(err).Str("tallParts", string(tallParts)).Msg("checkAllPartsUploadedCS:Unmarshal")
+		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("checkAllPartsUploadedCS:Unmarshal")
 	}
 	return len(allParts) == totals
 }
@@ -451,7 +457,7 @@ func checkPartNumberUploadedCS(chunkNumber int, dfsID string) bool {
 	cps := sessions.SESS.GetCompletePart(dfsID)
 	allPorts := make([]oss.UploadPart, 0)
 	if err := json.Unmarshal(cps, &allPorts); err != nil {
-		log.Log.Err(err).Str("cps", string(cps)).Msg("checkPartNumberUploadedCS:Unmarshal")
+		log.Log.Err(err).Str("cps", string(cps)).Str("key", dfsID).Msg("checkPartNumberUploadedCS:Unmarshal")
 	}
 	if len(allPorts) > 0 {
 		for _, port := range allPorts {

@@ -50,7 +50,7 @@ func (d SESSRedisDriver) GetChunkParts(dfsID string) (chunkNumber int) {
 		return
 	}
 	if err = json.Unmarshal(value, &chunkNumber); err != nil {
-		log.Log.Err(err).Str("value", string(value)).Msg("GetChunkParts:Unmarshal")
+		log.Log.Err(err).Str("value", string(value)).Str("key", dfsID).Msg("GetChunkParts:Unmarshal")
 		return
 	}
 	return
@@ -76,7 +76,7 @@ func (d SESSRedisDriver) GetChunkBS(dfsID string) (chunkNumber int) {
 		return
 	}
 	if err = json.Unmarshal(value, &chunkNumber); err != nil {
-		log.Log.Err(err).Str("value", string(value)).Msg("GetChunkParts:Unmarshal")
+		log.Log.Err(err).Str("value", string(value)).Str("key", dfsID).Msg("GetChunkParts:Unmarshal")
 		return
 	}
 	return
@@ -124,7 +124,7 @@ func (d SESSRedisDriver) GetChunkIMURS(dfsID string) (chunkNumber int) {
 		return
 	}
 	if err = json.Unmarshal(value, &chunkNumber); err != nil {
-		log.Log.Err(err).Str("value", string(value)).Msg("GetChunkParts:Unmarshal")
+		log.Log.Err(err).Str("value", string(value)).Str("key", dfsID).Msg("GetChunkParts:Unmarshal")
 		return
 	}
 	return
