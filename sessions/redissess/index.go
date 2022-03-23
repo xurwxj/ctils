@@ -1,10 +1,11 @@
 package redissess
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
+
+	json "github.com/json-iterator/go"
 
 	"github.com/go-redis/redis"
 	"github.com/pkg/errors"

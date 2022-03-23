@@ -3,8 +3,9 @@ package redissess
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+
+	json "github.com/json-iterator/go"
 
 	"github.com/go-redis/redis"
 	"github.com/xurwxj/ctils/log"

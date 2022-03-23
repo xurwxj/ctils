@@ -2,13 +2,14 @@ package aws
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"sort"
 	"sync"
 	"time"
+
+	json "github.com/json-iterator/go"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"

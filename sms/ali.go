@@ -1,9 +1,10 @@
 package sms
 
 import (
-	"encoding/json"
 	"errors"
 	"time"
+
+	json "github.com/json-iterator/go"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
 	dysmsapi20170525 "github.com/alibabacloud-go/dysmsapi-20170525/v2/client"

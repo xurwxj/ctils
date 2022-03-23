@@ -1,13 +1,14 @@
 package ali
 
 import (
-	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	json "github.com/json-iterator/go"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/xurwxj/ctils/log"
