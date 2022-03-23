@@ -18,6 +18,7 @@ require (
 	github.com/go-playground/validator/v10 v10.10.0 // indirect
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/golang/snappy v0.0.4 // indirect
+	github.com/json-iterator/go v1.1.10
 	github.com/klauspost/compress v1.14.1 // indirect
 	github.com/mholt/archiver/v3 v3.5.1 // indirect
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
