@@ -55,6 +55,44 @@ func AliSMS(phone, sign, code, param string) error {
 	return errors.New(res)
 }
 
+// 扩充 SmsUpExtendCode(上行短信扩展码字段)
+func AliSMSWithExtend(phone, sign, code, param string, extendFields map[string]string) error {
+	client, err := sdk.NewClientWithAccessKey(viper.GetString("sms.zoneID"), viper.GetString("sms.accessKey"), viper.GetString("sms.accessSecret"))
+	if err != nil {
+		return err
+	}
+
+	request := requests.NewCommonRequest()
+	request.Method = "POST"
+	request.Domain = viper.GetString("sms.domain")
+	request.Version = viper.GetString("sms.version")
+	request.ApiName = viper.GetString("sms.apiName")
+	request.QueryParams["RegionId"] = viper.GetString("sms.zoneID")
+	request.QueryParams["PhoneNumbers"] = phone
+	request.QueryParams["SignName"] = sign
+	request.QueryParams["TemplateCode"] = code
+	request.QueryParams["TemplateParam"] = param
+
+	for k, v := range extendFields {
+		if len(v) > 0 {
+			request.QueryParams[k] = v
+		}
+	}
+
+	response, err := client.ProcessCommonRequest(request)
+	if err != nil {
+		return err
+	}
+	res := response.GetHttpContentString()
+	var s smsBackObj
+
+	err = json.Unmarshal([]byte(res), &s)
+	if err == nil && s.Code == "OK" {
+		return nil
+	}
+	return errors.New(res)
+}
+
 type smsBackObj struct {
 	Code      string `json:"Code"`
 	RequestID string `json:"RequestId"`
