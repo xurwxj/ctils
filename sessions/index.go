@@ -37,25 +37,15 @@ type SESSInterface interface {
 	GetCommonSession(key string) ([]byte, error)
 
 	RedisLockRefresh(redisKey string, expiration time.Duration) (succ bool)
+	DelRedisKey(redisKey string) error
+
 	SetCompletePart(dfsID string, allParts interface{})
 	GetCompletePart(dfsID string) (allParts []byte)
 	DelCompletePart(dfsID string)
 
-	SetChunkParts(dfsID string, chunkNumber int)
-	GetChunkParts(dfsID string) (chunkNumber int)
-	DelChunkParts(dfsID string)
-
-	SetChunkBS(dfsID string, chunkNumber int)
-	GetChunkBS(dfsID string) (chunkNumber int)
-	DelChunkBS(dfsID string)
-
 	SetImurs(dfsID string, imurs interface{})
 	GetImurs(dfsID string) (imurs []byte)
 	DelImurs(dfsID string)
-
-	SetChunkIMURS(dfsID string, chunkNumber int)
-	GetChunkIMURS(dfsID string) (chunkNumber int)
-	DelChunkIMURS(dfsID string)
 
 	DelAllParts(dfsID string)
 }
