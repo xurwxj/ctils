@@ -474,6 +474,9 @@ func checkPartNumberUploaded(chunkNumber int, dfsID string) bool {
 
 func checkPartNumberUploadedCS(chunkNumber int, dfsID string) bool {
 	cps := sessions.SESS.GetCompletePart(dfsID)
+	if len(cps) == 0 {
+		return false
+	}
 	allPorts := make([]oss.UploadPart, 0)
 	if err := json.Unmarshal(cps, &allPorts); err != nil {
 		log.Log.Err(err).Str("cps", string(cps)).Str("key", dfsID).Msg("checkPartNumberUploadedCS:Unmarshal")
