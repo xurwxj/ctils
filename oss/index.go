@@ -64,6 +64,24 @@ func ChunkUploadGetStreamCS(userID, prefer string, chunk utils.ChunksObj) (utils
 	return chunk, 500, "unknownErr", fmt.Errorf("unknownErr")
 }
 
+// ChunkUploadGetStreamCSByDfsID auto upload file chunk check of get method by cloud also concurrent safe
+func ChunkUploadGetStreamCSByDfsID(userID, dfsID, prefer string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
+	if prefer == "" {
+		prefer = "default"
+	}
+	if chunk.Bucket == "" {
+		chunk.Bucket = "data"
+	}
+	cloud := viper.GetString("oss.cloud")
+	switch cloud {
+	case "aliyun":
+		return ali.ChunkUploadGetStreamCSByDfsID(userID, dfsID, prefer, cloud, chunk)
+	case "aws":
+		return aws.ChunkUploadGetStreamCSByDfsID(userID, dfsID, prefer, cloud, chunk)
+	}
+	return chunk, 500, "unknownErr", fmt.Errorf("unknownErr")
+}
+
 // ChunkUploadPostStream auto upload file chunk by cloud
 func ChunkUploadPostStream(userID, prefer string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	if prefer == "" {
@@ -95,6 +113,23 @@ func ChunkUploadPostStreamCS(userID, prefer string, chunk utils.ChunksObj, fileC
 		return ali.ChunkUploadPostStreamCS(userID, prefer, cloud, chunk, fileChunk)
 	case "aws":
 		return aws.ChunkUploadPostStreamCS(userID, prefer, cloud, chunk, fileChunk)
+	}
+	return chunk, 500, "unknownErr", fmt.Errorf("unknownErr")
+}
+
+func ChunkUploadPostStreamCSByDfsID(userID, dfsID, prefer string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
+	if prefer == "" {
+		prefer = "default"
+	}
+	if chunk.Bucket == "" {
+		chunk.Bucket = "data"
+	}
+	cloud := viper.GetString("oss.cloud")
+	switch cloud {
+	case "aliyun":
+		return ali.ChunkUploadPostStreamCSByDfsID(userID, dfsID, prefer, cloud, chunk, fileChunk)
+	case "aws":
+		return aws.ChunkUploadPostStreamCSByDfsID(userID, dfsID, prefer, cloud, chunk, fileChunk)
 	}
 	return chunk, 500, "unknownErr", fmt.Errorf("unknownErr")
 }

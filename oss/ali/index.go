@@ -76,6 +76,10 @@ func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (
 
 func ChunkUploadGetStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
+	return ChunkUploadGetStreamCSByDfsID(userID, dfsID, prefer, cloud, chunk)
+}
+
+func ChunkUploadGetStreamCSByDfsID(userID, dfsID, prefer, cloud string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	if !checkPartNumberUploadedCS(chunk.ChunkNumber, dfsID) {
 		return chunk, 400, "NotExist", nil
 	}
@@ -128,6 +132,10 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 
 func ChunkUploadPostStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
+	return ChunkUploadPostStreamCSByDfsID(userID, dfsID, prefer, cloud, chunk, fileChunk)
+}
+
+func ChunkUploadPostStreamCSByDfsID(userID, dfsID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	b, err := getBucketInstanceCS(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
 	log.Log.Debug().Interface("b", b).Msg("ChunkUploadPostStreamCS")
 	if err != nil {
@@ -155,11 +163,11 @@ func ChunkUploadPostStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj
 		return chunk, 400, "NotExist", err
 	}
 	f.Close()
-	err = setCompletePartCS(chunkPart, dfsID, chunk.ChunkNumber)
+	allParts, err := setCompletePartCS(chunkPart, dfsID, chunk.ChunkNumber)
 	if err != nil {
 		return chunk, 400, "NotExist", err
 	}
-	if checkAllPartsUploadedCS(chunk.TotalChunks, dfsID) {
+	if len(allParts) == chunk.TotalChunks {
 		return completeChunksUploadCS(userID, prefer, dfsID, chunk)
 	}
 	return chunk, 200, "OK", nil
@@ -197,18 +205,26 @@ func setCompletePart(part oss.UploadPart, dfsID string, chunkNumber int) error {
 	return nil
 }
 
-func setCompletePartCS(part oss.UploadPart, dfsID string, chunkNumber int) error {
-	cp := sessions.SESS.GetChunkParts(dfsID)
-	if cp > 0 {
-		time.Sleep(1 * time.Second)
+func setCompletePartCS(part oss.UploadPart, dfsID string, chunkNumber int) ([]oss.UploadPart, error) {
+	allParts := make([]oss.UploadPart, 0)
+	redisLockKey := "multiUpload_setCompletePartCS_" + dfsID
+	if !sessions.SESS.RedisLockRefresh(redisLockKey, time.Second*10) {
+		// 没拿到锁，重试获取
+		time.Sleep(time.Second)
 		return setCompletePartCS(part, dfsID, chunkNumber)
 	}
-	sessions.SESS.SetChunkParts(dfsID, chunkNumber)
+	defer sessions.SESS.DelRedisKey(redisLockKey)
+
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
-	allParts := make([]oss.UploadPart, 0)
-	if err := json.Unmarshal(tallParts, &allParts); err != nil {
-		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("setCompletePartCS:Unmarshal")
+	if len(tallParts) != 0 {
+		// 已经被初始化了,直接解析
+		if err := json.Unmarshal(tallParts, &allParts); err != nil {
+			// 解析失败直接抬走，救不了了
+			log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("setCompletePartCS:Unmarshal")
+			return allParts, err
+		}
 	}
+
 	if len(allParts) < 1 {
 		allParts = append(allParts, part)
 	} else {
@@ -229,8 +245,7 @@ func setCompletePartCS(part oss.UploadPart, dfsID string, chunkNumber int) error
 		})
 	}
 	sessions.SESS.SetCompletePart(dfsID, allParts)
-	sessions.SESS.DelChunkParts(dfsID)
-	return nil
+	return allParts, nil
 }
 
 func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
@@ -276,6 +291,14 @@ func completeChunksUpload(userID, prefer, dfsID string, chunk utils.ChunksObj) (
 }
 
 func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
+	redisLockKey := "multiUpload_completeChunksUploadCS_" + dfsID
+	if !sessions.SESS.RedisLockRefresh(redisLockKey, time.Second*10) {
+		// 没拿到锁，重试获取
+		time.Sleep(time.Second)
+		return completeChunksUploadCS(userID, prefer, dfsID, chunk)
+	}
+	defer sessions.SESS.DelRedisKey(redisLockKey)
+
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
 	if err := json.Unmarshal(tallParts, &allParts); err != nil {
@@ -319,7 +342,7 @@ func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj)
 			chunk.DownURL = url
 		}
 	}
-	go clearInitCS(dfsID)
+	clearInitCS(dfsID)
 	return chunk, 200, "DONE", err
 }
 func clearInit(dfsID string) {
@@ -333,9 +356,6 @@ func clearInit(dfsID string) {
 
 func clearInitCS(dfsID string) {
 	sessions.SESS.DelAllParts(dfsID)
-	bsCS.Lock.Lock()
-	defer bsCS.Lock.Unlock()
-	delete(bsCS.OsBucket, dfsID)
 }
 func getIMURS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMultipartUploadResult, error) {
 	t, h := chunkIMURS[dfsID]
@@ -358,21 +378,29 @@ func getIMURS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMultipa
 }
 
 func getIMURSCS(dfsID string, chunkNumber int, b *oss.Bucket) (oss.InitiateMultipartUploadResult, error) {
-	t := sessions.SESS.GetChunkIMURS(dfsID)
-	timur := sessions.SESS.GetImurs(dfsID)
 	imur := oss.InitiateMultipartUploadResult{}
-	if err := json.Unmarshal(timur, &imur); err != nil {
-		log.Log.Err(err).Str("timur", string(timur)).Str("key", dfsID).Msg("getIMURSCS:Unmarshal")
-	}
-	if t > 0 && (imur.UploadID == "") {
-		time.Sleep(1 * time.Second)
+	redisLockKey := "multiUpload_imurs_" + dfsID
+	if !sessions.SESS.RedisLockRefresh(redisLockKey, time.Second*10) {
+		// 没拿到锁，重试获取
+		time.Sleep(time.Second)
 		return getIMURSCS(dfsID, chunkNumber, b)
 	}
+	defer sessions.SESS.DelRedisKey(redisLockKey)
 
-	if imur.UploadID != "" {
+	timur := sessions.SESS.GetImurs(dfsID)
+	if len(timur) != 0 {
+		// 已经被初始化了,直接获取值
+		if err := json.Unmarshal(timur, &imur); err != nil {
+			log.Log.Err(err).Str("timur", string(timur)).Str("key", dfsID).Msg("getIMURSCS:Unmarshal")
+			return imur, err
+		}
+		if imur.UploadID == "" {
+			tmpErr := fmt.Errorf("imur UploadID is empty")
+			log.Log.Err(tmpErr).Str("timur", string(timur)).Str("key", dfsID).Msg("getIMURSCS:UploadID")
+			return imur, tmpErr
+		}
 		return imur, nil
 	}
-	sessions.SESS.SetChunkIMURS(dfsID, chunkNumber)
 	imur, err := b.InitiateMultipartUpload(dfsID)
 	if err != nil {
 		return oss.InitiateMultipartUploadResult{}, err
@@ -403,26 +431,22 @@ func getBucketInstance(prefer, bucketType, dfsID string, chunkNumber int) (*oss.
 }
 
 func getBucketInstanceCS(prefer, bucketType, dfsID string, chunkNumber int) (*oss.Bucket, error) {
-	t := sessions.SESS.GetChunkBS(dfsID)
+	paramLogs := []interface{}{prefer, bucketType, dfsID, chunkNumber}
 	bsCS.Lock.Lock()
 	defer bsCS.Lock.Unlock()
-	log.Log.Debug().Interface("OsBucket", bsCS.OsBucket).Msg("getBucketInstanceCS:OsBucket")
-	b, has := bsCS.OsBucket[dfsID]
-	if t > 0 && (b == nil || !has) {
-		time.Sleep(1 * time.Second)
-		return getBucketInstanceCS(prefer, bucketType, dfsID, chunkNumber)
-	}
+	log.Log.Debug().Interface("paramLogs", paramLogs).Msg("getBucketInstanceCS:OsBucket")
+	prefer, bucket := utils.GetByBucketPrefer(prefer, bucketType)
+	bucketKey := prefer + "___" + bucket
+	b, has := bsCS.OsBucket[bucketKey]
 	if has && b != nil {
 		return b, nil
 	}
-	log.Log.Debug().Interface("b", b).Str("b", dfsID).Msg("getBucketInstanceCS:OsBucket")
-	sessions.SESS.SetChunkBS(dfsID, chunkNumber)
-	prefer, bucket := utils.GetByBucketPrefer(prefer, bucketType)
+	log.Log.Debug().Interface("paramLogs", paramLogs).Msg("getBucketInstanceCS:OsBucket:New")
 	b, err := InitBucket(prefer, bucket)
 	if err != nil {
 		return nil, err
 	}
-	bsCS.OsBucket[dfsID] = b
+	bsCS.OsBucket[bucketKey] = b
 	return b, nil
 }
 
@@ -458,9 +482,13 @@ func checkPartNumberUploaded(chunkNumber int, dfsID string) bool {
 
 func checkPartNumberUploadedCS(chunkNumber int, dfsID string) bool {
 	cps := sessions.SESS.GetCompletePart(dfsID)
+	if len(cps) == 0 {
+		return false
+	}
 	allPorts := make([]oss.UploadPart, 0)
 	if err := json.Unmarshal(cps, &allPorts); err != nil {
 		log.Log.Err(err).Str("cps", string(cps)).Str("key", dfsID).Msg("checkPartNumberUploadedCS:Unmarshal")
+		return false
 	}
 	if len(allPorts) > 0 {
 		for _, port := range allPorts {

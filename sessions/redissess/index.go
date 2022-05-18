@@ -91,7 +91,17 @@ func (d SESSRedisDriver) GetCommonSession(key string) ([]byte, error) {
 	return rs, err
 }
 
+// RedisLockRefresh redis lock
 func (d SESSRedisDriver) RedisLockRefresh(redisKey string, expiration time.Duration) (succ bool) {
 	result := d.RD.SetNX(redisKey, 1, expiration)
 	return result.Val()
+}
+
+// DelRedisKey delete redis key
+func (d SESSRedisDriver) DelRedisKey(redisKey string) error {
+	err := d.RD.Del(redisKey).Err()
+	if err != redis.Nil && err != nil {
+		return err
+	}
+	return nil
 }
