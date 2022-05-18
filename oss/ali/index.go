@@ -76,6 +76,10 @@ func ChunkUploadGetStream(userID, prefer, cloud string, chunk utils.ChunksObj) (
 
 func ChunkUploadGetStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
+	return ChunkUploadGetStreamCSByDfsID(userID, dfsID, prefer, cloud, chunk)
+}
+
+func ChunkUploadGetStreamCSByDfsID(userID, dfsID, prefer, cloud string, chunk utils.ChunksObj) (utils.ChunksObj, int, string, error) {
 	if !checkPartNumberUploadedCS(chunk.ChunkNumber, dfsID) {
 		return chunk, 400, "NotExist", nil
 	}
@@ -128,6 +132,10 @@ func ChunkUploadPostStream(userID, prefer, cloud string, chunk utils.ChunksObj, 
 
 func ChunkUploadPostStreamCS(userID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	dfsID := utils.SetMultiPartDfsID(userID, cloud, chunk)
+	return ChunkUploadPostStreamCSByDfsID(userID, dfsID, prefer, cloud, chunk, fileChunk)
+}
+
+func ChunkUploadPostStreamCSByDfsID(userID, dfsID, prefer, cloud string, chunk utils.ChunksObj, fileChunk *multipart.FileHeader) (utils.ChunksObj, int, string, error) {
 	b, err := getBucketInstanceCS(prefer, chunk.Bucket, dfsID, chunk.ChunkNumber)
 	log.Log.Debug().Interface("b", b).Msg("ChunkUploadPostStreamCS")
 	if err != nil {
