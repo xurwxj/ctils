@@ -157,7 +157,7 @@ func ChunkUploadPostStreamCSByDfsID(userID, dfsID, prefer, cloud string, chunk u
 	defer f.Close()
 	chunkPart, err := b.UploadPart(imur, f, chunk.CurrentChunkSize, chunk.ChunkNumber, options...)
 	if err != nil {
-		if strings.Index(err.Error(), "dial tcp") > -1 {
+		if strings.Index(err.Error(), "dial tcp") > -1 || strings.Index(err.Error(), "write tcp") > -1 {
 			return ChunkUploadPostStreamCS(userID, prefer, cloud, chunk, fileChunk)
 		}
 		return chunk, 400, "NotExist", err
@@ -301,8 +301,10 @@ func completeChunksUploadCS(userID, prefer, dfsID string, chunk utils.ChunksObj)
 
 	tallParts := sessions.SESS.GetCompletePart(dfsID)
 	allParts := make([]oss.UploadPart, 0)
-	if err := json.Unmarshal(tallParts, &allParts); err != nil {
-		log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("completeChunksUploadCS:Unmarshal")
+	if len(tallParts) > 0 {
+		if err := json.Unmarshal(tallParts, &allParts); err != nil {
+			log.Log.Err(err).Str("tallParts", string(tallParts)).Str("key", dfsID).Msg("completeChunksUploadCS:Unmarshal")
+		}
 	}
 
 	if len(allParts) != chunk.TotalChunks {
